@@ -3,6 +3,8 @@ title: astro-koharu 使用指南
 link: astro-koharu-guide
 catalog: true
 date: 2025-12-29 21:55:00
+math: true
+quiz: true
 description: astro-koharu 博客的完整使用指南，包含快速开始、配置说明、文章系统、界面功能等详细介绍
 tags:
   - Astro
@@ -94,47 +96,62 @@ site:
     - 前端
 ```
 
-### 本地 CMS 编辑器（无后端）
+### 本地轻 CMS 应用
 
-本项目内置“无后端 CMS”能力：在 `config/cms.yaml` 开启编辑按钮后，可直接在 dev 环境中在浏览器内编辑文章，或一键跳转到本地编辑器（VS Code / Cursor / Zed 等）。
+本项目提供独立的 CMS 管理应用，支持文章管理、浏览器内编辑、Markdown 预览等功能。
 
 ![](https://r2.cosine.ren/i/2026/01/a1c1d69ef48c758010e553e882e470db.webp)
 ![](https://r2.cosine.ren/i/2026/01/6c6956e3b49729ddf272669f3f738f13.webp)
 ![](https://r2.cosine.ren/i/2026/01/1d86afe19ed2fe921990657685393c2d.webp)
 
-**配置文件：** `config/cms.yaml`
+**启动 CMS：**
 
-```yaml
-enabled: true # 是否启用本地 CMS 功能（仅开发环境）
-localProjectPath: "/Users/yourname/Documents/Programming/me/astro-koharu" # 本地项目（绝对路径） 例如: '/Users/yourname/path/to/astro-koharu'
-contentRelativePath: "src/content/blog" # 博客内容目录
-editors:
-  - id: vscode
-    name: VS Code
-    icon: devicon-plain:vscode # 可从 https://icon-sets.iconify.design/ 中搜寻图标
-    urlTemplate: "vscode://file{path}"
-  - id: cursor
-    name: Cursor
-    icon: simple-icons:cursor
-    urlTemplate: "cursor://file{path}"
-  - id: zed
-    name: Zed
-    icon: simple-icons:zedindustries
-    urlTemplate: "zed://file{path}"
-  # - id: obsidian
-  #   name: Obsidian
-  #   icon: simple-icons:obsidian
-  #   urlTemplate: 'obsidian://open?vault=koharu-content&file={relativePath}' # 这里的 reletivePath 是相对 content 目录的地址。
+```bash
+# 首次使用需安装依赖
+pnpm cms:install
+
+# 启动 CMS（默认端口 4322）
+pnpm cms
 ```
 
-**使用说明：**
+CMS 提供以下功能：
 
-- `enabled` 关闭后不显示编辑入口。
-- `localProjectPath` 必须是本机的绝对路径，否则无法生成正确的本地文件路径。
-- `urlTemplate` 支持 `{path}` `{relativePath}` `{line}` `{column}` 占位符，可按编辑器协议自行扩展。
-- 浏览器编辑器无需本地编辑器协议，适合在移动端或临时环境快速修改。
+- 📊 文章仪表盘：查看文章统计、分类分布、最近更新
+- 📝 浏览器内编辑器：基于 BlockNote 的富文本编辑，支持 Markdown
+- 🔄 草稿/发布切换：一键切换文章状态
+- 📌 置顶管理：快速置顶/取消置顶文章
+- ➕ 新建文章：交互式创建文章，自动生成 frontmatter
 
-后续考虑制作整体的文章管理、分类管理等视图，也是无后端的。
+### 本地编辑器跳转
+
+文章页的编辑按钮支持一键跳转到本地编辑器（VS Code / Cursor / Zed 等）。
+
+**配置文件：** `config/site.yaml` 的 `dev` 部分
+
+```yaml
+dev:
+  localProjectPath: "/Users/yourname/path/to/astro-koharu" # 本地项目绝对路径
+  contentRelativePath: "src/content/blog" # 博客内容目录
+  editors:
+    - id: vscode
+      name: VS Code
+      icon: devicon-plain:vscode # 可从 https://icon-sets.iconify.design/ 搜寻图标
+      urlTemplate: "vscode://file{path}"
+    - id: cursor
+      name: Cursor
+      icon: simple-icons:cursor
+      urlTemplate: "cursor://file{path}"
+    - id: zed
+      name: Zed
+      icon: simple-icons:zedindustries
+      urlTemplate: "zed://file{path}"
+```
+
+**配置说明：**
+
+- `localProjectPath` 必须是本机的绝对路径，否则无法生成正确的文件路径
+- `urlTemplate` 支持 `{path}` 占位符，会被替换为文件的完整路径
+- 配置后，文章页会显示编辑按钮，点击可直接在本地编辑器中打开文件
 
 **特色分类配置：**
 
@@ -356,6 +373,8 @@ tocNumbering: true # 是否显示目录编号（默认 true）
 draft: false # 是否为草稿（默认 false）
 sticky: false # 是否置顶（默认 false）
 excludeFromSummary: false # 是否排除 AI 摘要和相似度计算（默认 false，系列文章建议设为 true）
+math: false # 是否启用数学公式渲染（默认 false，启用后支持 KaTeX）
+quiz: false # 是否启用练习题交互（默认 false，启用后支持四种题型）
 ---
 ```
 
@@ -366,6 +385,31 @@ excludeFromSummary: false # 是否排除 AI 摘要和相似度计算（默认 fa
 - 建议为重要文章手写描述，以获得更好的 SEO 效果
 - 如果省略描述，系统会自动使用 AI 生成的摘要（需运行 `pnpm generate:summaries`）
 - 如果既没有手写描述也没有 AI 摘要，则自动提取文章正文的前 150 个字符
+
+**关于 link 字段（自定义 URL）：**
+
+⚠️ **重要**：`link` 字段会被**自动转换为小写**，以保持 URL 的一致性和规范性。
+
+- **规范化行为**：无论你输入 `MyPost`、`myPost` 还是 `mypost`，最终 URL 都会是 `/post/mypost`
+- **文件名大小写无关**：文章文件名可以使用任意大小写（如 `MyPost.md`），系统会自动处理
+- **AI 摘要和相似度**：生成的 `summaries.json` 和 `similarities.json` 中的 key 也会统一为小写
+- **最佳实践**：建议直接使用小写和连字符（如 `my-awesome-post`），避免混淆
+
+```yaml
+# ✅ 推荐写法
+link: my-awesome-post  # URL: /post/my-awesome-post
+
+# ⚠️ 会被转为小写
+link: MyAwesomePost    # URL: /post/myawesomepost（不是 /post/MyAwesomePost）
+link: My-Awesome-Post  # URL: /post/my-awesome-post
+```
+
+如果省略 `link` 字段，系统会使用文件名（同样会转为小写）：
+
+```yaml
+# 文件: src/content/blog/MyPost.md
+# 省略 link 字段 → URL: /post/mypost
+```
 
 ### 分类系统
 
@@ -465,6 +509,50 @@ categories:
 ```
 
 > **提示**：文章的 `categories` 字段需要与 `featuredSeries` 中某个系列的 `categoryName` 匹配才会被归入该系列。
+
+### 独立页面
+
+除了博客文章外，你可以在 `src/pages/` 目录下创建 `.md` 文件来添加独立页面（如"关于"、"歌单"等）。这些页面使用 `PageLayout.astro` 布局，支持完整的 Markdown 增强语法。
+
+**创建独立页面：**
+
+在 `src/pages/` 目录下新建 `.md` 文件：
+
+```markdown
+---
+layout: ../layouts/PageLayout.astro
+title: "歌单"
+description: "我喜欢的音乐"
+coverTitle: "我的歌单"
+comments: false
+---
+
+页面内容...
+```
+
+**Frontmatter 字段：**
+
+| 字段          | 必填 | 说明                                          |
+| ------------- | ---- | --------------------------------------------- |
+| `layout`      | ✅   | 固定为 `../layouts/PageLayout.astro`          |
+| `title`       | ✅   | 页面标题（用于浏览器标签页）                  |
+| `description` | ❌   | 页面描述（用于 SEO）                          |
+| `coverTitle`  | ❌   | 封面显示的标题（默认使用 `title`）            |
+| `comments`    | ❌   | 是否显示评论区（默认 `true`）                 |
+
+**添加导航入口：**
+
+在 `config/site.yaml` 的 `navigation` 中添加对应菜单项：
+
+```yaml
+navigation:
+  # ...
+  - name: 歌单
+    path: /music
+    icon: ri:music-2-fill
+```
+
+> **提示**：`src/pages/` 下所有 `.md` 文件会被 Koharu CLI 的备份功能自动覆盖，无需额外配置。
 
 ## 界面功能
 
@@ -1271,6 +1359,511 @@ https://zhuanlan.zhihu.com/p/1900483903984243480
 
 这是一个 [普通链接](https://example.com)，不会被嵌入。
 
+**Shoka 兼容 Markdown 语法：**
+
+astro-koharu 从 Hexo Shoka 主题迁移了一套丰富的 Markdown 扩展语法，所有功能均可通过 `config/site.yaml` 的 `content` 配置项独立开关。
+
+*文字特效（`enableShokaEffects`）：*
+
+支持多种行内文字装饰效果：
+
+| 语法                    | 效果       | 说明                               |
+| ----------------------- | ---------- | ---------------------------------- |
+| `++文字++`              | 下划线     | `<ins>` 标签                       |
+| `++文字++{.wavy}`       | 波浪下划线 | 支持 `.wavy` 修饰符                |
+| `++文字++{.dot}`        | 着重点     | 支持 `.dot` 修饰符                 |
+| `++文字++{.primary}`    | 彩色下划线 | 支持 `.primary` `.success` `.warning` `.danger` `.info` |
+| `==文字==`              | 高亮       | `<mark>` 标签                      |
+| `~文字~`                | 下标       | `<sub>` 标签，如 H~2~O            |
+| `^文字^`                | 上标       | `<sup>` 标签，如 E=mc^2^          |
+
+示例效果：
+
+++这是下划线文字++ ++波浪下划线++{.wavy} ++着重点标记++{.dot}
+
+++主色调++{.primary} ++成功++{.success} ++警告++{.warning} ++危险++{.danger} ++信息++{.info}
+
+==这是高亮文字==
+
+H~2~O 是水的化学式，E = mc^2^ 是质能方程
+
+*颜色文字与特殊样式（`enableShokaAttrs`）：*
+
+使用 `[文字]{.class}` 语法为文字添加颜色和样式：
+
+```markdown
+[红色]{.red} [粉色]{.pink} [橙色]{.orange} [黄色]{.yellow}
+[绿色]{.green} [水色]{.aqua} [蓝色]{.blue} [紫色]{.purple} [灰色]{.grey}
+
+[这段文字会有彩虹渐变效果]{.rainbow}
+
+[Ctrl]{.kbd} + [C]{.kbd} 复制，[Ctrl]{.kbd} + [V]{.kbd} 粘贴
+
+[默认]{.label .default} [主要]{.label .primary} [信息]{.label .info}
+[成功]{.label .success} [警告]{.label .warning} [危险]{.label .danger}
+```
+
+示例效果：
+
+[红色]{.red} [粉色]{.pink} [橙色]{.orange} [黄色]{.yellow} [绿色]{.green} [水色]{.aqua} [蓝色]{.blue} [紫色]{.purple} [灰色]{.grey}
+
+[这段文字会有彩虹渐变效果]{.rainbow}
+
+[Ctrl]{.kbd} + [C]{.kbd} 复制，[Ctrl]{.kbd} + [V]{.kbd} 粘贴
+
+[默认]{.label .default} [主要]{.label .primary} [信息]{.label .info} [成功]{.label .success} [警告]{.label .warning} [危险]{.label .danger}
+
+*隐藏文字 / Spoiler（`enableShokaSpoiler`）：*
+
+```markdown
+这里有一段!!隐藏文字，点击显示!!
+
+这里有一段!!模糊文字，鼠标悬停显示!!{.blur}
+```
+
+示例效果：
+
+这里有一段!!隐藏文字，点击显示!!
+
+这里有一段!!模糊文字，鼠标悬停显示!!{.blur}
+
+- 默认模式：点击后粒子消散动画揭示文字（基于 spoilerjs Web Component）
+- `.blur` 模式：鼠标悬停时模糊消失
+
+*注音标注 / Ruby（`enableShokaRuby`）：*
+
+为 CJK 文字添加注音，适用于日语假名、汉语拼音等：
+
+```markdown
+{漢字^かんじ}的注音示例
+
+{取り返す^とりかえす}是日语中"取回"的意思
+```
+
+示例效果：
+
+{漢字^かんじ}的注音示例。{取り返す^とりかえす}是日语中"取回"的意思。
+
+渲染为 HTML `<ruby>` 标签，浏览器原生支持。
+
+*提醒块 / Note Blocks（`enableShokaContainers`）：*
+
+使用 `:::` 语法创建不同样式的提醒块：
+
+```markdown
+:::default
+这是默认提醒块
+:::
+
+:::primary
+这是主要提醒块，用于重要提示
+:::
+
+:::info
+这是信息提醒块
+:::
+
+:::success
+这是成功提醒块
+:::
+
+:::warning
+这是警告提醒块
+:::
+
+:::danger
+这是危险提醒块
+:::
+
+:::info no-icon
+这是没有图标的信息块
+:::
+```
+
+示例效果：
+
+:::info
+这是信息提醒块，用于提供额外信息
+:::
+
+:::warning
+这是警告提醒块，请注意
+:::
+
+:::danger
+这是危险提醒块，务必谨慎
+:::
+
+支持的样式：`default`、`primary`、`info`、`success`、`warning`、`danger`。添加 `no-icon` 可隐藏图标。提醒块内部支持嵌套 Markdown 语法。
+
+*折叠块 / Collapse（`enableShokaContainers`）：*
+
+使用 `+++` 语法创建可折叠内容（渲染为 `<details>` + `<summary>`）：
+
+```markdown
++++primary 点击展开详细内容
+折叠的内容，支持 **Markdown** 格式化。
+
+- 列表项 1
+- 列表项 2
++++
+
++++warning 注意事项
+需要注意的内容
++++
+
++++danger 危险操作
+请确保你知道自己在做什么！
++++
+```
+
+示例效果：
+
++++primary 点击展开详细内容
+折叠的内容，支持 **Markdown** 格式化。
+
+- 列表项 1
+- 列表项 2
++++
+
++++warning 注意事项
+需要注意的内容
++++
+
+支持的样式：`primary`、`info`、`success`、`warning`、`danger`。
+
+*标签卡 / Tabs（`enableShokaContainers`）：*
+
+使用 `;;;` 语法创建标签页切换，同一组 ID 的标签卡会自动组合：
+
+````markdown
+;;;mygroup JavaScript
+```js
+console.log('Hello, World!');
+```
+;;;
+
+;;;mygroup Python
+```python
+print('Hello, World!')
+```
+;;;
+
+;;;mygroup Rust
+```rust
+fn main() {
+    println!("Hello, World!");
+}
+```
+;;;
+````
+
+示例效果：
+
+;;;guide-tab1 JavaScript
+```js
+console.log('Hello, World!');
+```
+;;;
+
+;;;guide-tab1 Python
+```python
+print('Hello, World!')
+```
+;;;
+
+;;;guide-tab1 Rust
+```rust
+fn main() {
+    println!("Hello, World!");
+}
+```
+;;;
+
+- `;;;groupId 标签名` 定义一个标签页，同一 `groupId` 的标签自动组合
+- 第一个标签默认激活
+- 标签内支持任意 Markdown 内容
+
+*友链卡片（`enableShokaHexoTags`）：*
+
+使用 `{% links %}` 标签在文章中插入友链卡片网格：
+
+```markdown
+{% links %}
+- site: 博客名称
+  url: https://example.com
+  owner: 站长昵称
+  desc: 站点描述
+  image: https://example.com/avatar.png
+  color: '#ed788b'
+- site: 另一个博客
+  url: https://example2.com
+  owner: Alice
+  desc: 一个热爱技术的博客
+  image: https://api.dicebear.com/7.x/avataaars/svg?seed=Alice
+  color: '#BEDCFF'
+{% endlinks %}
+```
+
+示例效果：
+
+{% links %}
+- site: 余弦の博客
+  url: https://blog.cosine.ren
+  owner: cos
+  desc: FE / ACG / 手工
+  image: https://blog.cosine.ren/img/avatar.webp
+  color: '#ed788b'
+- site: 示例博客
+  url: https://example.com
+  owner: Alice
+  desc: 一个热爱技术的博客
+  image: https://api.dicebear.com/7.x/avataaars/svg?seed=Alice
+  color: '#BEDCFF'
+{% endlinks %}
+
+卡片数据使用 YAML 格式，支持 `site`、`url`、`owner`、`desc`、`image`、`color` 字段。
+
+*音频播放器（`enableShokaHexoTags`）：*
+
+使用 `{% media audio %}` 标签嵌入音频播放器，支持网易云音乐等平台（通过 Meting API 解析）：
+
+```markdown
+{% media audio %}
+- name: 歌曲名称
+  url: https://music.163.com/#/song?id=3339210292
+{% endmedia %}
+```
+
+示例效果：
+
+{% media audio %}
+- name: 示例音频
+  url: https://music.163.com/#/song?id=3339210292
+{% endmedia %}
+
+支持歌单模式，可配置多个分组：
+
+```markdown
+{% media audio %}
+- title: 歌单名称 1
+  list:
+    - https://music.163.com/#/playlist?id=8676645748
+- title: 歌单名称 2
+  list:
+    - https://music.163.com/#/playlist?id=17606384886
+{% endmedia %}
+```
+
+{% media audio %}
+- title: 歌单名称 1
+  list:
+    - https://music.163.com/#/playlist?id=8676645748
+- title: 歌单名称 2
+  list:
+    - https://music.163.com/#/playlist?id=17606384886
+{% endmedia %}
+
+*视频播放器（`enableShokaHexoTags`）：*
+
+使用 `{% media video %}` 标签嵌入视频播放器：
+
+```markdown
+{% media video %}
+- name: 视频 1
+  url: https://example.com/video1.mp4
+- name: 视频 2
+  url: https://example.com/video2.mp4
+{% endmedia %}
+```
+
+{% media video %}
+- name: 视频 1
+  url: https://example.com/video1.mp4
+- name: 视频 2
+  url: https://example.com/video2.mp4
+{% endmedia %}
+
+多个视频时自动显示播放列表。
+
+*练习题系统（`enableQuiz`）：*
+
+支持四种交互式题型，适合教程和学习笔记。需在文章 frontmatter 中设置 `quiz: true`。
+
+**单选题：**
+
+```markdown
+- 下列哪个是 JavaScript 的基本数据类型？{.quiz}
+  - Object{.options}
+  - Array{.options}
+  - Symbol{.correct}
+  - Function{.options}
+
+> 解析：Symbol 是 ES6 引入的基本数据类型。
+```
+
+示例效果：
+
+- 下列哪个是 JavaScript 的基本数据类型？{.quiz}
+  - Object{.options}
+  - Array{.options}
+  - Symbol{.correct}
+  - Function{.options}
+
+> 解析：Symbol 是 ES6 引入的基本数据类型，而 Object、Array、Function 都是引用类型。
+
+- 选项标记 `{.correct}` 为正确答案，`{.options}` 为干扰项
+
+**多选题：**
+
+```markdown
+- 以下哪些是 CSS 布局方式？{.quiz .multi}
+  - Flexbox{.correct}
+  - jQuery{.options}
+  - Grid{.correct}
+  - Float{.correct}
+
+> 解析：Flexbox、Grid 和 Float 都是 CSS 布局方式。
+```
+
+示例效果：
+
+- 以下哪些是 CSS 布局方式？{.quiz .multi}
+  - Flexbox{.correct}
+  - jQuery{.options}
+  - Grid{.correct}
+  - Float{.correct}
+
+> 解析：Flexbox、Grid 和 Float 都是 CSS 布局方式。jQuery 是一个 JavaScript 库。
+
+- 添加 `.multi` 标记启用多选模式
+
+**判断题：**
+
+```markdown
+- `const` 声明的变量不能重新赋值，但可以修改其属性。{.quiz .true}
+
+> 解析：`const` 只保证变量绑定不可变。
+
+- HTML 是一种编程语言。{.quiz}
+
+> 解析：HTML 是标记语言，不是编程语言。
+```
+
+示例效果：
+
+- `const` 声明的变量不能重新赋值，但可以修改其属性。{.quiz .true}
+
+> 解析：`const` 只保证变量绑定不可变，如果变量指向一个对象，其属性仍然可以修改。
+
+- HTML 是一种编程语言。{.quiz}
+
+> 解析：HTML（超文本标记语言）是一种标记语言，不是编程语言。
+
+- 添加 `.true` 表示陈述正确，不添加 `.true` 则表示错误
+
+**填空题：**
+
+```markdown
+- CSS 中，[Flexbox]{.gap} 适合一维布局，[Grid]{.gap} 适合二维布局。{.quiz .fill}
+
+> 常见错误：[Float]{.mistake}
+```
+
+示例效果：
+
+- CSS 中，[Flexbox]{.gap} 适合一维布局，[Grid]{.gap} 适合二维布局。{.quiz .fill}
+
+> 常见错误：[Float]{.mistake}
+
+- `[答案]{.gap}` 标记正确答案（支持多个空）
+- `[错误答案]{.mistake}` 标记常见错误（首次答错时提示）
+- `>` 引用块内容为解析说明
+
+*数学公式（`enableMath`）：*
+
+基于 KaTeX 渲染数学公式。需在文章 frontmatter 中设置 `math: true`：
+
+```markdown
+行内公式：$E = mc^2$
+
+块级公式：
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$
+```
+
+示例效果：
+
+行内公式：$E = mc^2$
+
+块级公式：
+
+$$
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+$$
+
+*代码块增强（`enableCodeMeta`）：*
+
+代码块支持额外的元数据标注：
+
+`````markdown
+```js title="hello.js" url="https://example.com" linkText="查看源码" mark:1,3
+const greeting = 'Hello';
+const name = 'World';
+console.log(`${greeting}, ${name}!`);
+```
+
+```bash command:("$":1-3)
+npm install astro
+npm run dev
+npm run build
+```
+`````
+
+| 元数据                  | 说明                                     |
+| ----------------------- | ---------------------------------------- |
+| `title="文件名"`        | 显示代码块标题                           |
+| `url="链接"`            | 添加外部源码链接                         |
+| `linkText="文字"`       | 自定义链接文字（默认为 URL）             |
+| `mark:1,3`              | 高亮指定行                               |
+| `command:("$":1-3)`     | 标记 shell 命令行（显示 `$` 前缀）       |
+
+示例效果：
+
+```js title="hello.js" url="https://example.com" linkText="查看源码" mark:1,3
+const greeting = 'Hello';
+const name = 'World';
+console.log(`${greeting}, ${name}!`);
+```
+
+```bash command:("$":1-3)
+npm install astro
+npm run dev
+npm run build
+```
+
+*Shoka 功能配置总览：*
+
+所有 Shoka 兼容功能均可在 `config/site.yaml` 的 `content` 部分独立开关：
+
+```yaml
+content:
+  # Shoka 兼容功能（默认全部启用，设为 false 可关闭）
+  enableShokaContainers: true   # :::提醒块 ;;;标签卡 +++折叠块
+  enableShokaAttrs: true        # [text]{.class} 属性语法
+  enableShokaEffects: true      # ++下划线++ ==高亮== ~下标~ ^上标^
+  enableShokaSpoiler: true      # !!隐藏文字!!
+  enableShokaRuby: true         # {文字^注音} 注音标注
+  enableShokaHexoTags: true     # {% links %} {% media %} Hexo 标签
+  enableMath: true              # $数学公式$ KaTeX 渲染
+  enableCodeMeta: true          # 代码块增强 (title, mark, command)
+  enableQuiz: true              # 练习题交互功能
+```
+
+> **提示**：完整的语法演示可参考 [Shoka 主题 Markdown 语法演示](/post/shoka-features) 文章。
+
 **其他增强：**
 
 - 自动目录生成
@@ -1370,7 +1963,7 @@ pnpm koharu new post          # 新建博客文章
 pnpm koharu new friend        # 新建友情链接
 pnpm koharu backup            # 备份博客内容（--full 完整备份）
 pnpm koharu restore           # 还原备份（--latest, --dry-run）
-pnpm koharu update            # 更新主题（--check, --skip-backup, --force, --tag, --rebase, --dry-run）
+pnpm koharu update            # 更新主题（--check, --clean, --rebase, --tag, --dry-run 等）
 pnpm koharu generate          # 生成内容资产（交互式选择）
 pnpm koharu generate lqips    # 生成 LQIP 占位符
 pnpm koharu generate similarities  # 生成相似度向量
@@ -1590,83 +2183,103 @@ pnpm koharu update --force
 # 更新到指定版本（如 v2.1.0）
 pnpm koharu update --tag v2.1.0
 
-# 使用 rebase 模式（重写历史，完全同步上游）
+# clean 模式（零冲突，强制备份，适合首次迁移或冲突较多时）
+pnpm koharu update --clean
+
+# rebase 模式（重写历史，强制备份，适合熟悉 git 的用户）
 pnpm koharu update --rebase
 
-# 组合使用：rebase 到指定版本
-pnpm koharu update --rebase --tag v2.1.0
-
-# 预览 rebase 操作（不实际执行）
-pnpm koharu update --rebase --dry-run
+# 预览操作（不实际执行，可配合 --clean 或 --rebase 使用）
+pnpm koharu update --dry-run
 ```
 
 **选项说明：**
 
-| 选项            | 说明                                              |
-| --------------- | ------------------------------------------------- |
-| `--check`       | 仅检查更新，不执行合并                            |
-| `--skip-backup` | 跳过备份步骤                                      |
-| `--force`       | 跳过工作区脏检查和确认提示（不影响合并方式）      |
-| `--tag`         | 指定目标版本（如 `v2.1.0`），支持升级和降级       |
-| `--rebase`      | Rebase 模式，重写历史完全同步上游（强制要求备份） |
-| `--dry-run`     | 预览 rebase 操作，不实际执行（仅 rebase 模式）    |
+| 选项            | 说明                                                |
+| --------------- | --------------------------------------------------- |
+| `--check`       | 仅检查更新，不执行合并                              |
+| `--skip-backup` | 跳过备份步骤（clean/rebase 模式下无效，强制备份）   |
+| `--force`       | 跳过工作区脏检查和确认提示（不影响合并方式）        |
+| `--tag`         | 指定目标版本（如 `v2.1.0`），支持升级和降级         |
+| `--clean`       | Clean 模式，零冲突更新（替换主题文件 + 还原用户内容）|
+| `--rebase`      | Rebase 模式，重写历史完全同步上游（强制要求备份）   |
+| `--dry-run`     | 预览操作，不实际执行                                |
 
-**关于 Rebase 模式：**
+**三种更新模式：**
 
-Rebase 模式适用于需要完全同步上游历史的场景，执行 `git rebase upstream/main`（或指定的 tag），将本地提交重放到目标引用之上。
+| 模式 | 命令 | 适合场景 | 备份 | 冲突处理 |
+|------|------|---------|------|---------|
+| **默认** | `pnpm koharu update` | 日常更新 | 可选 | 用户内容自动保留，主题冲突手动解决 |
+| **Clean** | `--clean` | 首次迁移、冲突较多 | 强制 | 零冲突 |
+| **Rebase** | `--rebase` | 熟悉 git 的用户 | 强制 | 需手动解决 |
 
-⚠️ **注意**：Rebase 模式会重写 Git 历史，请确保已备份重要内容。CLI 会在 rebase 模式下强制要求备份（忽略 `--skip-backup` 和 `--force`）。
+**默认模式（Merge）：**
 
-**使用 `--dry-run` 预览：**
+使用 `git merge --no-ff` 合并上游更新，保留 merge-base 信息，让后续更新的冲突更少。
 
-在执行 rebase 前，可以使用 `--dry-run` 预览操作效果：
+智能冲突处理：
 
-```bash
-pnpm koharu update --rebase --dry-run
-```
-
-这会显示将要进行的操作，但不会实际执行 rebase，方便你了解 rebase 会如何影响本地提交。
-
-**关于 Squash Merge（默认行为）：**
-
-默认使用 **squash merge** 方式更新主题。
-
-✨ **优势：**
-
-- **保持历史简洁**：每次更新产生单个提交，而不是引入上游的所有提交
-- **专注内容**：你的 Git 历史主要展示博客内容变化，而不是主题的每个小改动
-- **减少冲突**：squash merge 比普通 merge 更不容易产生复杂冲突
+- **用户内容文件**（博客文章、配置、独立页面、图片等）发生冲突时，自动保留本地版本
+- **主题文件**（组件、脚本、样式等）发生冲突时，需要手动解决
+- 如果所有冲突都是用户内容 → 整个更新自动完成，零手动操作
 
 📝 **提交格式：**
 
-每次更新会创建如下格式的提交：
-
 ```plain
-chore: update theme to v2.3.2
-
-Squashed merge from upstream
+chore: merge upstream theme v2.3.2
 ```
 
-🔄 **与 Rebase 模式的对比：**
+**Clean 模式：**
 
-- **Squash merge（默认）**：压缩上游提交为一个，保留本地提交历史
-- **Rebase 模式**：完全同步上游历史，将本地提交重放到上游之上（历史重写）
+用上游最新版本**替换所有主题文件**，然后从备份**还原用户内容**，实现零冲突更新。
 
-大多数用户推荐使用默认的 squash merge 方式。
+执行流程：
+1. 强制备份你的博客内容
+2. 创建 merge commit 记录版本关系
+3. 用上游文件覆盖本地所有文件
+4. 从刚才的备份还原用户内容（博客文章、配置、独立页面、图片、.env）
+
+⚠️ **注意：**
+
+- 你对**主题文件**的自定义修改（如改了某个组件、布局、样式）**不会被保留**
+- 备份范围包含：`src/content/blog/`、`config/site.yaml`、`src/pages/*.md`、`public/img/`、`.env`
+- 使用 `--full` 备份选项可额外保留 favicon、LQIP、相似度、AI 摘要等生成资产
+
+适用场景：
+- 首次从旧版本迁移，历史冲突太多无法正常 merge
+- 没有自定义主题文件，只写了博客内容
+
+**Rebase 模式：**
+
+执行 `git rebase upstream/main`（或指定的 tag），将本地提交重放到上游之上。适合熟悉 git 操作的用户。
+
+⚠️ **注意**：Rebase 模式会重写 Git 历史，请确保已备份重要内容。CLI 会强制要求备份（忽略 `--skip-backup` 和 `--force`）。
+
+**使用 `--dry-run` 预览：**
+
+所有模式都支持 `--dry-run` 预览操作效果：
+
+```bash
+pnpm koharu update --dry-run          # 预览默认 merge
+pnpm koharu update --clean --dry-run  # 预览 clean 模式
+pnpm koharu update --rebase --dry-run # 预览 rebase 操作
+```
+
+> **💡 给熟悉 git 的用户：** CLI 更新命令是对 git 操作的封装便利工具。如果你对 git 比较熟悉，建议直接使用 `git fetch upstream && git rebase upstream/main` 手动操作，这样能更精确地控制合并过程。
 
 **更新流程说明：**
 
-1. **检查 Git 状态** - 确保工作区干净（无未提交的更改）
-2. **备份当前内容** - 可选，但强烈建议
-3. **设置 upstream** - 自动添加 `upstream` remote（如果不存在）
-4. **获取最新代码** - `git fetch upstream`
-5. **显示更新预览** - 列出新增的提交
-6. **执行合并** - `git merge upstream/main`
-7. **安装依赖** - `pnpm install`
+1. **检查 Git 状态** — 确保工作区干净（无未提交的更改）
+2. **备份当前内容** — 可选（clean/rebase 模式强制备份）
+3. **设置 upstream** — 自动添加 `upstream` remote（如果不存在）
+4. **获取最新代码** — `git fetch upstream`
+5. **显示更新预览** — 列出新增的提交和更新日志
+6. **执行更新** — 根据所选模式执行 merge / clean / rebase
+7. **安装依赖** — `pnpm install`
 
 **处理合并冲突：**
 
-如果更新时遇到合并冲突，CLI 会显示冲突文件列表。你可以：
+默认 merge 模式下，用户内容冲突会被自动解决（保留本地版本）。如果主题文件仍有冲突，CLI 会显示冲突文件列表。你可以：
 
 1. 选择"中止合并"恢复到更新前状态
 2. 手动解决冲突后运行 `git add . && git commit`
@@ -1690,7 +2303,9 @@ git commit -m "merge: resolve conflicts"
 | 获取更新       | `git fetch upstream`                                                   |
 | 查看新提交数量 | `git rev-list --left-right --count HEAD...upstream/main`               |
 | 查看新提交列表 | `git log HEAD..upstream/main --pretty=format:"%h \| %s \| %ar \| %an"` |
-| 合并更新       | `git merge upstream/main --no-edit`                                    |
+| 默认合并       | `git merge --no-ff upstream/main`                                      |
+| Clean 合并     | `git merge -s ours upstream/main` + `git checkout upstream/main -- .`  |
+| Rebase         | `git rebase upstream/main`                                             |
 | 中止合并       | `git merge --abort`                                                    |
 
 #### 内容生成
@@ -2076,6 +2691,9 @@ comment:
 - **关闭搜索**：移除 `astro.config.mjs` 中的 `pagefind()` 集成
 - **关闭统计**：设置 `analytics.umami.enabled = false`
 - **关闭评论**：移除 `comment.provider` 配置或将其设置为空
+- **关闭 Shoka 语法**：在 `config/site.yaml` 的 `content` 部分将对应功能设为 `false`，如 `enableShokaContainers: false`（关闭提醒块/折叠块/标签卡）、`enableShokaSpoiler: false`（关闭隐藏文字）等
+- **关闭数学公式**：设置 `content.enableMath = false`
+- **关闭练习题**：设置 `content.enableQuiz = false`
 
 ### 如何更改文章 URL 格式？
 

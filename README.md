@@ -83,9 +83,11 @@ pnpm dev
 - 基于 Pagefind 的无后端全站搜索
 - **可更换评论系统**：支持 Waline（推荐）、Giscus、Remark42 三种评论组件，配置文件一键切换，主题自动跟随
 - 完整的 Markdown 增强功能（GFM、代码高亮、自动目录、Mermaid 图表、Infographic 信息图）
+- **Shoka 兼容 Markdown 语法**：文字特效（下划线/高亮/上下标/颜色）、隐藏文字（Spoiler）、注音标注（Ruby）、提醒块、折叠块、标签卡、友链卡片、音视频播放器、练习题系统（单选/多选/判断/填空）、数学公式（KaTeX）、代码块增强（title/mark/command）—— 所有功能均可独立开关
 - 灵活的多级分类与标签系统
 - [可开关] 多系列文章支持（周刊、书摘等自定义系列，支持自定义 URL slug）
   > 💡 **说明**：featuredSeries 适合文章数量较多的分类，将其从首页主列表分离以避免刷屏。系列文章仅最新一篇在首页高亮，其余通过系列专属页面访问，但在归档、分类、标签等页面仍正常展示。
+- **独立页面系统**：在 `src/pages/` 下创建 `.md` 文件即可添加自定义页面（关于、歌单等），支持自定义封面标题和评论开关
 - 响应式设计
 - 草稿与置顶功能
 - 阅读进度条与阅读时间估算
@@ -100,7 +102,7 @@ pnpm dev
 - 无后端站点公告系统：可通过配置文件管理公告，支持时间控制、多条公告堆叠、自定义颜色、hover 已读
 - 有样式的 [RSS](https://blog.cosine.ren/rss.xml) 订阅源链接
 - **Koharu CLI**：交互式命令行工具，支持备份/还原、内容生成、备份管理
-- 无后端 CMS（本地编辑器 / 浏览器编辑）：文章页支持在 `config/cms.yaml` 启用编辑按钮，在 dev 模式内置浏览器编辑器与本地编辑器协议跳转（VS Code / Cursor / Zed），具体配置见 `config/cms.yaml`，后续考虑拓展更多 cms 功能，一键修改文件路径等。
+- **本地轻 CMS 应用**：运行 `pnpm cms` 启动独立的 CMS 管理界面，支持文章管理、浏览器内编辑、Markdown 预览等功能。文章页的编辑按钮支持一键跳转到本地编辑器（VS Code / Cursor / Zed），配置见 `config/site.yaml` 的 `dev` 部分。(后期会考虑做个有后端的版本，这期先静态)
 
 ## Koharu CLI
 
@@ -179,14 +181,23 @@ pnpm koharu update --skip-backup
 # 更新到指定版本
 pnpm koharu update --tag v2.1.0
 
-# 使用 rebase 模式（重写历史，强制备份）
+# clean 模式（零冲突，强制备份，适合首次迁移或冲突较多时）
+pnpm koharu update --clean
+
+# rebase 模式（重写历史，强制备份，适合熟悉 git 的用户）
 pnpm koharu update --rebase
 
-# 预览 rebase 操作（不实际执行）
-pnpm koharu update --rebase --dry-run
+# 预览操作（不实际执行）
+pnpm koharu update --dry-run
 ```
 
-> **💡 更新说明：** 默认使用 **squash merge** 方式更新，将上游所有提交压缩为单个提交，保持你的提交历史干净线性。
+> **💡 更新模式说明：**
+>
+> - **默认模式**：使用 `git merge --no-ff` 合并上游更新，保留 merge-base 信息。遇到用户内容（博客文章、配置等）冲突时自动保留本地版本，仅主题文件冲突需手动解决。
+> - **Clean 模式** (`--clean`)：用上游最新版本替换所有主题文件，然后从备份还原用户内容，实现零冲突更新。适合首次从旧版迁移或冲突较多时使用。**注意：用户对主题文件的自定义修改不会被保留。**
+> - **Rebase 模式** (`--rebase`)：将本地提交重放到上游之上，重写提交历史。适合熟悉 git 的用户。
+>
+> CLI 更新命令是对 git 操作的封装，熟悉 git 的用户也可以直接使用 `git merge`/`git rebase` 手动操作。
 
 ### 内容生成
 
@@ -215,7 +226,7 @@ pnpm koharu generate all          # 生成全部
 - **评论系统**（Waline / Giscus / Remark42，推荐使用 Waline）
 - 数据统计（Umami）
 - 圣诞特辑开关
-- 本地 CMS 配置（`config/cms.yaml`，用于浏览器编辑/本地编辑器协议跳转）
+- 开发工具配置（`config/site.yaml` 的 `dev` 部分，用于本地编辑器跳转）
 
 详细配置说明请参考文档。
 
@@ -254,6 +265,8 @@ comment:
   ![RSS 订阅源链接](https://r2.cosine.ren/i/2026/01/4476f67d1acea2e0991cc70d1d3cf6a1.webp)
 - 公告系统
   ![公告系统](https://r2.cosine.ren/i/2026/01/a4660955f52438b3cc2d21bdc931bbd4.gif)
+- Shoka 兼容 Markdown 语法 - 提醒块、折叠块、标签卡、文字特效、隐藏文字、注音标注、练习题等
+- 音视频播放器 - 支持网易云音乐歌单和视频播放
 
 ## 使用本主题的博客
 
