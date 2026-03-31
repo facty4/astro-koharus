@@ -1,5 +1,7 @@
 # astro-koharu
 
+**Language:** **中文** | [English](./docs/README.en.md) | [日本語](./docs/README.ja.md)
+
 ![](https://r2.cosine.ren/i/2026/01/94383107ba4586f773938ed4dae34ff1.webp)
 
 一个萌系 / 二次元 / 粉蓝配色的博客主题，适合 ACG、前端、手账向个人站，性能优异。
@@ -32,13 +34,12 @@
 
 ## 部署
 
-支持 **Vercel**、**Cloudflare Pages**、**Netlify** 等主流平台自动部署，会根据环境自动选择适配器，未识别平台则使用 Node.js 保底适配器（适合 Docker 或自托管）。
+支持 **Vercel**、**Netlify** 等主流平台自动部署，会根据环境自动选择适配器，未识别平台则使用 Node.js 保底适配器（适合 Docker 或自托管）。
 
 ### 一键部署
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cosZone/astro-koharu&project-name=astro-koharu&repository-name=astro-koharu)
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/cosZone/astro-koharu)
-[![Deploy to Cloudflare Pages](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cosZone/astro-koharu)
 
 ### Docker 部署
 
@@ -84,9 +85,11 @@ pnpm dev
 - **可更换评论系统**：支持 Waline（推荐）、Giscus、Remark42 三种评论组件，配置文件一键切换，主题自动跟随
 - 完整的 Markdown 增强功能（GFM、代码高亮、自动目录、Mermaid 图表、Infographic 信息图）
 - **Shoka 兼容 Markdown 语法**：文字特效（下划线/高亮/上下标/颜色）、隐藏文字（Spoiler）、注音标注（Ruby）、提醒块、折叠块、标签卡、友链卡片、音视频播放器、练习题系统（单选/多选/判断/填空）、数学公式（KaTeX）、代码块增强（title/mark/command）—— 所有功能均可独立开关
+- [可开关] **内容加密**：支持文章局部加密（加密块）和整篇文章加密（加密文章），使用 AES-256-GCM 客户端解密，密码仅在构建时使用、不传递到客户端
 - 灵活的多级分类与标签系统
 - [可开关] 多系列文章支持（周刊、书摘等自定义系列，支持自定义 URL slug）
   > 💡 **说明**：featuredSeries 适合文章数量较多的分类，将其从首页主列表分离以避免刷屏。系列文章仅最新一篇在首页高亮，其余通过系列专属页面访问，但在归档、分类、标签等页面仍正常展示。
+- [可开关] **追番页面（Bangumi）**：接入 [Bangumi API](https://bgm.tv)，展示动画/书籍/音乐/游戏收藏，支持分类切换、状态筛选、分页浏览，数据实时获取
 - **独立页面系统**：在 `src/pages/` 下创建 `.md` 文件即可添加自定义页面（关于、歌单等），支持自定义封面标题和评论开关
 - 响应式设计
 - 草稿与置顶功能
@@ -94,6 +97,7 @@ pnpm dev
 - 智能目录导航，支持 CSS 计数器自动编号（可按文章关闭）
 - 移动端文章阅读头部（显示当前章节标题、圆形阅读进度、可展开目录）
 - 友链系统与归档页面
+- **多语言支持（i18n）**：内置中英文 UI 翻译，支持自定义语言包、内容级翻译（分类名/系列名）、语言切换器、hreflang SEO 标签、locale-aware RSS 订阅。默认语言 URL 无前缀，其他语言自动加前缀（如 `/en/post/xxx`）
 - RSS 订阅支持
 - 支持 LQIP：图片加载前显示渐变色占位，提升视觉体验
 - [可开关] 基于语义相似度的智能文章推荐系统，使用 [transformers.js](https://huggingface.co/docs/transformers.js) 在本地生成文章嵌入向量，计算文章间的语义相似度
@@ -212,6 +216,12 @@ pnpm koharu generate summaries    # 生成 AI 摘要
 pnpm koharu generate all          # 生成全部
 ```
 
+## 构建缓存
+
+项目将 `.cache/og-data.json` 提交到 Git 仓库，用于缓存链接嵌入功能抓取的 OG 元数据（标题、描述、图片等）。这样在 Vercel、Netlify 等平台构建时可以直接复用已有缓存，避免每次构建都重新抓取外部链接的元信息，显著加速构建并减少对外部站点的请求。
+
+`.cache/` 目录下的其他文件（如 transformers 模型缓存）仍被 `.gitignore` 忽略。
+
 ## 配置说明
 
 博客配置统一使用 **`config/site.yaml`** 文件管理，包括：
@@ -225,10 +235,58 @@ pnpm koharu generate all          # 生成全部
 - 公告系统
 - **评论系统**（Waline / Giscus / Remark42，推荐使用 Waline）
 - 数据统计（Umami）
+- **国际化配置（i18n）**
+- **追番页面（Bangumi）**：配置 `bangumi.userId` 即可开启，注释掉整段关闭
 - 圣诞特辑开关
 - 开发工具配置（`config/site.yaml` 的 `dev` 部分，用于本地编辑器跳转）
 
 详细配置说明请参考文档。
+
+### 多语言配置（i18n）
+
+在 `config/site.yaml` 的 `i18n` 部分配置支持的语言：
+
+```yaml
+i18n:
+  defaultLocale: zh # 默认语言（URL 无前缀）
+  locales:
+    - code: zh
+      label: 中文
+    - code: en
+      label: English
+```
+
+**内容翻译**：在 `config/i18n-content.yaml` 中配置分类名、系列名等内容级字符串的翻译：
+
+```yaml
+en:
+  categories:
+    life: Life
+    note: Notes
+    tools: Tools
+  series:
+    weekly:
+      label: My Weekly
+      fullName: My Tech Weekly
+```
+
+**添加翻译文章**：将翻译文章放在 `src/content/blog/<locale>/` 目录下，保持与默认语言相同的路径结构：
+
+```plain
+src/content/blog/
+├── tools/getting-started.md        # 默认语言 (zh)
+├── en/tools/getting-started.md     # 英文翻译
+└── en/life/hello-world.md          # 英文翻译
+```
+
+没有对应翻译的文章会自动回退显示默认语言内容，并标注提示。
+
+**添加新语言**：
+
+1. 在 `config/site.yaml` 的 `i18n.locales` 中添加新语言
+2. 创建 `src/i18n/translations/<code>.ts`，按需翻译 UI 字符串（未翻译的 key 会回退到默认语言）
+3. 在 `src/i18n/translations/index.ts` 中注册新语言
+4. 在 `config/i18n-content.yaml` 中添加内容翻译（可选）
 
 ### 评论系统切换
 

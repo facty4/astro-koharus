@@ -37,6 +37,7 @@ astro-koharu 是一个基于 Astro 5.x 构建的现代化博客系统，从 Hexo
 - 阅读进度条与阅读时间估算
 - 移动端文章阅读头部
 - 友链系统与归档页面
+- 多语言支持（i18n）
 - RSS 订阅支持
 - LQIP（低质量图片占位符）
 - 圣诞特辑（可开关）
@@ -66,6 +67,12 @@ pnpm preview
 使用 Vercel 进行一键部署：
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/cosZone/astro-koharu&project-name=astro-koharu&repository-name=astro-koharu)
+
+### 构建缓存说明
+
+项目将 `.cache/og-data.json` 提交到 Git 仓库。该文件缓存了链接嵌入功能抓取的外部链接 OG 元数据（标题、描述、图片等），提交到 Git 后 Vercel、Netlify 等平台构建时可直接复用，无需每次重新抓取，显著加速构建速度。
+
+`.cache/` 目录下的其他文件（如 `transformers/` 模型缓存、`summaries-cache.json`）仍被 `.gitignore` 忽略，不会提交。
 
 ## 基本配置
 
@@ -136,15 +143,15 @@ dev:
     - id: vscode
       name: VS Code
       icon: devicon-plain:vscode # 可从 https://icon-sets.iconify.design/ 搜寻图标
-      urlTemplate: "vscode://file{path}"
+      urlTemplate: "vscode://file/{path}"
     - id: cursor
       name: Cursor
       icon: simple-icons:cursor
-      urlTemplate: "cursor://file{path}"
+      urlTemplate: "cursor://file/{path}"
     - id: zed
       name: Zed
       icon: simple-icons:zedindustries
-      urlTemplate: "zed://file{path}"
+      urlTemplate: "zed://file/{path}"
 ```
 
 **配置说明：**
@@ -375,6 +382,7 @@ sticky: false # 是否置顶（默认 false）
 excludeFromSummary: false # 是否排除 AI 摘要和相似度计算（默认 false，系列文章建议设为 true）
 math: false # 是否启用数学公式渲染（默认 false，启用后支持 KaTeX）
 quiz: false # 是否启用练习题交互（默认 false，启用后支持四种题型）
+password: mySecret # 整篇文章加密密码（可选，设置后整篇文章需输入密码才能阅读）
 ---
 ```
 
@@ -1860,9 +1868,71 @@ content:
   enableMath: true              # $数学公式$ KaTeX 渲染
   enableCodeMeta: true          # 代码块增强 (title, mark, command)
   enableQuiz: true              # 练习题交互功能
+  enableEncryptedBlock: true    # :::encrypted{password="..."} 加密内容块
 ```
 
 > **提示**：完整的语法演示可参考 [Shoka 主题 Markdown 语法演示](/post/shoka-features) 文章。
+
+*内容加密（`enableEncryptedBlock`）：*
+
+博客支持两种加密方式，满足不同的内容保护需求：
+
+**1. 加密块 —— 文章局部加密**
+
+在文章中使用 `:::encrypted{password="..."}` 语法包裹需要加密的内容：
+
+```markdown
+这部分内容公开可见。
+
+:::encrypted{password="demo"}
+这段内容需要输入密码 "demo" 才能查看。
+
+支持完整的 Markdown 语法，包括代码块、列表、图片等。
+:::
+
+这部分也是公开的。
+```
+
+加密块适合在一篇文章中**部分隐藏**敏感内容（如答案、剧透、私密笔记），其余内容正常展示。需要在 `config/site.yaml` 中启用 `enableEncryptedBlock: true`。
+
+**2. 加密文章 —— 整篇文章加密**
+
+在文章的 frontmatter 中添加 `password` 字段即可加密整篇文章：
+
+```yaml
+---
+title: 我的私密文章
+date: 2026-01-01
+password: mySecretPassword
+categories:
+  - 笔记
+---
+
+这里的所有内容都会被加密...
+```
+
+加密文章会显示一个全屏的解锁界面，输入正确密码后才能查看内容。解锁后代码高亮、目录导航、Mermaid 图表等增强功能会自动重新初始化。
+
+**安全模型说明：**
+
+加密功能使用 **AES-256-GCM** 算法，安全模型如下：
+
+- **构建时加密**：密码仅在 `pnpm build` 时用于加密，生成的 HTML 中**不包含密码明文**
+- **客户端解密**：读者在浏览器中输入密码后，通过 Web Crypto API 在本地解密，密码不会发送到任何服务器
+- **密钥派生**：使用 PBKDF2（100,000 次迭代）从密码派生加密密钥，提高暴力破解成本
+- **搜索排除**：加密内容自动添加 `data-pagefind-ignore`，不会被 Pagefind 搜索索引
+
+> ⚠️ **注意**：此加密设计的主要目的是**防止搜索引擎和爬虫索引加密内容**，而非抵御针对性攻击。密文和盐值嵌入在公开的 HTML 中，理论上可被离线暴力破解。请使用强密码，不要用于保护高度敏感的信息。
+
+**加密文章的特殊行为：**
+
+| 方面 | 行为 |
+|------|------|
+| RSS 订阅 | 标题前加 🔒 前缀，内容替换为"此文章已加密"提示 |
+| SEO / meta | description 使用 frontmatter 中的 `description`（若未设置则显示通用加密提示） |
+| 搜索索引 | 加密内容不会被 Pagefind 索引 |
+| 目录导航 | 解锁前不显示，解锁后自动重建 |
+| AI 摘要 | 基于加密前的原文生成（构建时可访问明文） |
 
 **其他增强：**
 
@@ -1870,9 +1940,165 @@ content:
 - 阅读时间计算
 - 外部链接自动添加 `target="_blank"`
 
+### 多语言支持（i18n）
+
+博客内置完整的国际化支持，可轻松添加多种语言。
+
+#### 基本配置
+
+在 `config/site.yaml` 的 `i18n` 部分配置支持的语言：
+
+```yaml
+i18n:
+  defaultLocale: zh        # 默认语言（URL 无前缀）
+  locales:
+    - code: zh
+      label: 中文
+    - code: en
+      label: English
+      # enabled: false     # 设为 false 可暂时禁用（保留内容但不生成路由）
+```
+
+配置多语言后：
+- 默认语言的页面 URL 不带前缀（如 `/post/hello`）
+- 其他语言自动加前缀（如 `/en/post/hello`）
+- 导航栏（桌面端）和移动端抽屉中自动显示语言切换器
+- 每个语言各自生成独立的 RSS 订阅源（如 `/en/rss.xml`）
+- HTML `<head>` 中自动输出 hreflang 标签，有利于 SEO
+
+如果只配置了一种语言，i18n 功能不会激活，不会产生额外的路由或 UI 元素。
+
+#### 翻译体系
+
+i18n 系统采用两层翻译架构：
+
+**1. UI 字符串（TypeScript）**
+
+界面上的按钮文字、提示信息等 UI 文本通过 TypeScript 翻译字典管理，位于 `src/i18n/translations/` 目录：
+
+- `zh.ts`：默认语言（中文），包含所有翻译 key（约 170 个），是唯一的 source-of-truth
+- `en.ts`：英文翻译，只需提供需要覆盖的 key，未提供的自动回退到中文
+
+翻译字符串支持 `{param}` 占位符插值：
+
+```typescript
+// zh.ts
+'post.totalPosts': '共 {count} 篇文章',
+
+// en.ts
+'post.totalPosts': '{count} posts',
+```
+
+**2. 内容字符串（YAML）**
+
+分类名、系列名、精选分类描述等内容级文本通过 `config/i18n-content.yaml` 管理。默认语言的值直接读取 `config/site.yaml`，此文件仅存放非默认语言的翻译：
+
+```yaml
+en:
+  categories:
+    life: Life
+    note: Notes
+    tools: Tools
+  series:
+    weekly:
+      label: My Weekly
+      fullName: My Tech Weekly
+  featuredCategories:
+    life:
+      label: Life
+      description: Life journals and essays
+```
+
+其中 `categories` 的 key 是分类的 URL slug（对应 `config/site.yaml` 中 `categoryMap` 的值），`series` 的 key 是系列的 slug。
+
+#### 添加翻译文章
+
+将翻译文章放在 `src/content/blog/<locale>/` 目录下，保持与默认语言相同的路径结构：
+
+```plain
+src/content/blog/
+├── life/hello-world.md            # 默认语言 (zh)
+├── tools/getting-started.md       # 默认语言 (zh)
+├── en/life/hello-world.md         # 英文翻译
+└── en/tools/getting-started.md    # 英文翻译
+```
+
+**回退机制**：当用户切换到非默认语言时，系统会显示该语言已有的翻译文章，对于尚未翻译的文章则自动回退显示默认语言内容，并在文章顶部标注提示信息。
+
+#### 添加新语言
+
+以添加日语（ja）为例：
+
+1. 在 `config/site.yaml` 的 `i18n.locales` 中添加新语言：
+
+```yaml
+i18n:
+  locales:
+    - code: zh
+      label: 中文
+    - code: en
+      label: English
+    - code: ja
+      label: 日本語
+```
+
+2. 创建 UI 翻译文件 `src/i18n/translations/ja.ts`：
+
+```typescript
+import type { UIStrings } from '../types';
+
+export const uiStrings: UIStrings = {
+  'nav.home': 'ホーム',
+  'common.search': '検索',
+  // ... 按需翻译，未提供的 key 自动回退到中文
+};
+```
+
+3. 在 `src/i18n/translations/index.ts` 中注册：
+
+```typescript
+import { uiStrings as ja } from './ja';
+
+export const translations: Record<string, DefaultUIStrings | UIStrings> = {
+  zh,
+  en,
+  ja, // 新增
+};
+```
+
+4.（可选）在 `config/i18n-content.yaml` 中添加日语的内容翻译。
+
+5.（可选）在 `src/content/blog/ja/` 目录下添加日语文章。
+
+#### 在组件中使用翻译
+
+**Astro 组件**（`.astro` 文件）中：
+
+```astro
+---
+import { getLocaleFromUrl, t, localizedPath } from '@/i18n';
+
+const locale = getLocaleFromUrl(Astro.url.pathname);
+---
+
+<h1>{t(locale, 'post.totalPosts', { count: 10 })}</h1>
+<a href={localizedPath('/archives', locale)}>归档</a>
+```
+
+**React 组件**（`.tsx` 文件）中：
+
+```tsx
+import { useTranslation } from '@hooks/useTranslation';
+
+function MyComponent() {
+  const { t, locale } = useTranslation();
+  return <button>{t('common.search')}</button>;
+}
+```
+
 ### RSS 订阅
 
-访问 `/rss.xml` 获取 RSS feed。
+访问 `/rss.xml` 获取 RSS feed。启用多语言时，每个语言有独立的 RSS 源（如 `/en/rss.xml`）。
 
 **包含内容：**
 
@@ -1911,20 +2137,29 @@ astro-koharu/
 │   │   └── theme/       # 主题切换
 │   ├── content/
 │   │   └── blog/        # 博客文章（Markdown）
+│   │       └── en/      # 英文翻译文章（按 locale 子目录组织）
+│   ├── i18n/            # 国际化模块
+│   │   ├── config.ts    # locale 配置（读取 site.yaml）
+│   │   ├── utils.ts     # 翻译函数、URL 工具
+│   │   ├── content.ts   # 内容翻译加载（读取 i18n-content.yaml）
+│   │   └── translations/  # UI 翻译字典（zh.ts, en.ts）
 │   ├── layouts/         # 页面布局模板
 │   ├── pages/           # 页面路由
+│   │   └── [lang]/      # 非默认语言的镜像路由
 │   ├── lib/             # 工具函数
 │   ├── hooks/           # React hooks
 │   ├── constants/       # 常量配置
+│   ├── store/           # 全局状态（nanostores）
 │   ├── scripts/         # 构建脚本
 │   ├── styles/          # 全局样式
 │   └── types/           # TypeScript 类型定义
 ├── public/              # 静态资源
 │   └── img/             # 图片资源
 ├── config/
-│   └── site.yaml        # 站点配置（含分类映射）
+│   ├── site.yaml        # 站点配置（含分类映射、i18n 配置）
+│   └── i18n-content.yaml  # 内容级翻译（分类名、系列名等）
 ├── astro.config.mjs     # Astro 配置
-├── tailwind.config.ts   # Tailwind 配置
+├── tailwind.config.mjs  # Tailwind 配置
 └── tsconfig.json        # TypeScript 配置
 ```
 

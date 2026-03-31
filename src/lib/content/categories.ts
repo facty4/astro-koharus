@@ -2,53 +2,64 @@
  * Category-related utility functions
  */
 
-import { getCollection } from 'astro:content';
 import { categoryMap } from '@constants/category';
+import { getContentCategoryName, getContentFeaturedCategoryField, getContentSeriesField } from '@/i18n/content';
+import type { Locale } from '@/i18n/types';
 import { encodeSlug } from '../route';
+import { memoize } from './cache';
+import { getSortedPosts } from './posts';
 import type { Category, CategoryListResult } from './types';
+
+/** Reverse map: slug → category name for O(1) lookup */
+const slugToName = new Map<string, string>();
+for (const [name, slug] of Object.entries(categoryMap)) {
+  slugToName.set(slug, name);
+}
+
+// Re-export pure path utilities (defined in category-path.ts to break circular dependency)
+export { buildCategoryPath, getCategoryArr } from './category-path';
 
 /**
  * Get hierarchical category list with counts (excluding drafts in production)
  */
-export async function getCategoryList(): Promise<CategoryListResult> {
-  const allBlogPosts = await getCollection('blog', ({ data }) => {
-    // 在生产环境中，过滤掉草稿
-    return import.meta.env.PROD ? data.draft !== true : true;
-  });
-  const countMap: { [key: string]: number } = {}; // TODO: 需要优化，应该以分类路径为键名而不是 name 如数据结构既是根分类也是笔记-后端-数据结构。
-  const resCategories: Category[] = [];
+export async function getCategoryList(locale?: string): Promise<CategoryListResult> {
+  return memoize('categoryList', locale ?? '__all__', async () => {
+    const allBlogPosts = await getSortedPosts(locale);
+    const countMap: { [key: string]: number } = {}; // TODO: 需要优化，应该以分类路径为键名而不是 name 如数据结构既是根分类也是笔记-后端-数据结构。
+    const resCategories: Category[] = [];
 
-  // 统计每个分类的直接文章数量
-  for (let i = 0; i < allBlogPosts.length; ++i) {
-    const post = allBlogPosts[i];
-    const { catalog, categories } = post.data;
-    if (!catalog || !categories?.length) {
-      continue;
-    }
-
-    const firstCategory = categories[0];
-    if (Array.isArray(firstCategory)) {
-      // categories[0] = ['笔记', '算法']
-      if (!firstCategory.length) continue;
-
-      for (let j = 0; j < firstCategory.length; ++j) {
-        const name = firstCategory[j];
-        countMap[name] = (countMap[name] || 0) + 1;
-        if (j === 0) {
-          addCategoryRecursively(resCategories, [], name);
-        } else {
-          const parentNames = firstCategory.slice(0, j);
-          addCategoryRecursively(resCategories, parentNames, name);
-        }
+    // 统计每个分类的直接文章数量
+    for (let i = 0; i < allBlogPosts.length; ++i) {
+      const post = allBlogPosts[i];
+      const { catalog, categories } = post.data;
+      if (!catalog || !categories?.length) {
+        continue;
       }
-    } else if (typeof firstCategory === 'string') {
-      // categories[0] = '工具'
-      countMap[firstCategory] = (countMap[firstCategory] || 0) + 1;
-      addCategoryRecursively(resCategories, [], firstCategory);
-    }
-  }
 
-  return { categories: resCategories, countMap };
+      const firstCategory = categories[0];
+      if (Array.isArray(firstCategory)) {
+        // categories[0] = ['笔记', '算法']
+        if (!firstCategory.length) continue;
+
+        for (let j = 0; j < firstCategory.length; ++j) {
+          const name = firstCategory[j];
+          countMap[name] = (countMap[name] || 0) + 1;
+          if (j === 0) {
+            addCategoryRecursively(resCategories, [], name);
+          } else {
+            const parentNames = firstCategory.slice(0, j);
+            addCategoryRecursively(resCategories, parentNames, name);
+          }
+        }
+      } else if (typeof firstCategory === 'string') {
+        // categories[0] = '工具'
+        countMap[firstCategory] = (countMap[firstCategory] || 0) + 1;
+        addCategoryRecursively(resCategories, [], firstCategory);
+      }
+    }
+
+    return { categories: resCategories, countMap };
+  });
 }
 
 /**
@@ -116,8 +127,7 @@ export function getCategoryNameByLink(link: string): string {
   if (segments.length === 0) return '';
 
   const lastSegment = decodeURIComponent(segments[segments.length - 1]);
-  const res = Object.keys(categoryMap).find((key) => categoryMap[key] === lastSegment) ?? '';
-  return res;
+  return slugToName.get(lastSegment) ?? '';
 }
 
 /**
@@ -165,26 +175,36 @@ export function getParentCategory(category: Category | null, categories: Categor
 }
 
 /**
- * Build category path from category names
- * @param categoryNames Array of category names or single category name
- * @returns Category path like "/categories/note/front-end"
+ * Translate a category name based on locale.
+ * Looks up the YAML content config (config/i18n-content.yaml), falls back to original name.
  */
-export function buildCategoryPath(categoryNames: string | string[]): string {
-  if (!categoryNames) return '';
-
-  const names = Array.isArray(categoryNames) ? categoryNames : [categoryNames];
-  if (names.length === 0) return '';
-
-  const slugs = names.map((name) => encodeSlug(categoryMap[name]));
-  return `/categories/${slugs.join('/')}`;
+export function translateCategoryName(name: string, locale: Locale): string {
+  const slug = categoryMap[name];
+  if (!slug) return name;
+  return getContentCategoryName(locale, slug) ?? name;
 }
 
 /**
- * 统一 ['分类1', '分类2'] 和 '分类'
+ * Translate a featured series field (label, fullName, etc.) based on locale.
+ * Looks up the YAML content config, falls back to the raw YAML value from site config.
  */
-export function getCategoryArr(categories?: string[] | string) {
-  if (!categories) return [];
-  if (Array.isArray(categories) && categories.length) {
-    return categories as string[];
-  } else return [categories as string];
+export function translateSeriesField(slug: string, field: string, fallback: string | undefined, locale: Locale): string {
+  if (!fallback) return '';
+  return getContentSeriesField(locale, slug, field) ?? fallback;
+}
+
+/**
+ * Translate a featured category field (label, description) based on locale.
+ *
+ * The `link` parameter matches the `link` field in featuredCategories config
+ * (e.g. 'life', 'note/front-end').
+ */
+export function translateFeaturedCategoryField(
+  link: string,
+  field: string,
+  fallback: string | undefined,
+  locale: Locale,
+): string {
+  if (!fallback) return '';
+  return getContentFeaturedCategoryField(locale, link, field) ?? fallback;
 }
