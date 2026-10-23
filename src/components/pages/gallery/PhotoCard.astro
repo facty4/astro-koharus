@@ -1,0 +1,50 @@
+---
+import Icon from "@components/common/Icon.astro";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import type { GalleryPhoto } from "@/utils/gallery-utils";
+
+interface Props {
+	photo: GalleryPhoto;
+	albumId: string;
+	alt: string;
+}
+
+const { photo, albumId, alt } = Astro.props;
+---
+
+<div
+	class="gallery-photo"
+	data-gallery-photo
+	style={`aspect-ratio: ${photo.width} / ${photo.height};`}
+>
+	<a
+		href={photo.src}
+		data-no-swup
+		data-fancybox={`gallery-${albumId}`}
+		data-src={photo.src}
+		data-type="image"
+		class="gallery-photo__link"
+		aria-label={alt}
+	>
+		<span class="gallery-photo__placeholder" aria-hidden="true">
+			<Icon name="material-symbols:photo-library" />
+		</span>
+		<img
+			src={photo.src}
+			alt={alt}
+			width={photo.width}
+			height={photo.height}
+			loading="lazy"
+			decoding="async"
+			class="gallery-photo__image"
+		/>
+		<span class="gallery-photo__error" role="status">{i18n(I18nKey.galleryImageFailed)}</span>
+		<span class="gallery-photo__zoom" aria-hidden="true">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<circle cx="11" cy="11" r="8" />
+				<path d="m21 21-4.35-4.35M11 8v6M8 11h6" />
+			</svg>
+		</span>
+	</a>
+</div>

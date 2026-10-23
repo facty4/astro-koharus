@@ -1,0 +1,96 @@
+---
+import I18nKey from "@i18n/i18nKey";
+import { i18n } from "@i18n/translation";
+import {
+	CalendarDays,
+	ChevronRight,
+	ChevronsDownUp,
+	Folder,
+	Hash,
+	SlidersHorizontal,
+} from "lucide-svelte";
+import ArchiveTree from "@/components/controls/ArchiveTree.astro";
+import type { ArchiveView } from "@/types/archive";
+import { buildArchiveViews } from "@/utils/archive-data";
+import type { PostForList } from "@/utils/content-utils";
+import { url } from "@/utils/url-utils";
+import "@/styles/pages/archive-panel.css";
+
+interface Props {
+	sortedPosts: PostForList[];
+}
+const { sortedPosts } = Astro.props;
+const views = buildArchiveViews(sortedPosts);
+const tabs: { id: ArchiveView; label: string; Icon: typeof CalendarDays }[] = [
+	{ id: "time", label: i18n(I18nKey.archiveTime), Icon: CalendarDays },
+	{ id: "category", label: i18n(I18nKey.categories), Icon: Folder },
+	{ id: "tag", label: i18n(I18nKey.tags), Icon: Hash },
+];
+---
+
+<section
+	class="archive-panel"
+	data-archive-panel
+	data-label-uncategorized={i18n(I18nKey.uncategorized)}
+	data-label-post-one={i18n(I18nKey.postCount)}
+	data-label-post-many={i18n(I18nKey.postsCount)}
+	data-label-expand={i18n(I18nKey.archiveExpandAll)}
+	data-label-collapse={i18n(I18nKey.archiveCollapseAll)}
+	aria-label={i18n(I18nKey.archive)}
+>
+	<div class="archive-panel__toolbar" data-archive-toolbar>
+		<div class="archive-panel__breadcrumb" aria-live="polite" aria-atomic="true">
+			<a href={url("/archive/")} class="archive-panel__breadcrumb-root">{i18n(I18nKey.archive)}</a>
+			<ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" />
+			<span class="archive-panel__breadcrumb-current">
+				<span data-archive-current-label>{i18n(I18nKey.archiveTime)}</span>
+				<span class="archive-panel__breadcrumb-term" data-archive-filter-term hidden>
+					<ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" />
+					<span data-archive-filter-term-text />
+				</span>
+				<span class="archive-panel__summary-count" data-archive-total>{views.time.length}</span>
+			</span>
+		</div>
+		<div class="archive-panel__actions">
+			<div class="archive-panel__switcher" data-archive-switcher>
+				<div class="archive-panel__switcher-options" id="archive-view-options" data-archive-options inert aria-hidden="true">
+					<div class="archive-panel__switcher-clip">
+						<div class="archive-panel__tabs" role="tablist" aria-label={i18n(I18nKey.archiveFilter)}>
+							<span class="archive-panel__tab-indicator" aria-hidden="true" />
+							{tabs.map(({ id, label, Icon }, index) => (
+								<button type="button" role="tab" class="archive-panel__tab" id={`archive-tab-${id}`} aria-controls={`archive-view-${id}`} aria-selected={index === 0 ? "true" : "false"} title={label} tabindex={-1} data-archive-tab={id} data-archive-label={label}>
+									<Icon size={14} strokeWidth={1.6} aria-hidden="true" />
+									<span>{label}</span>
+								</button>
+							))}
+						</div>
+					</div>
+				</div>
+				<button type="button" class="archive-panel__switch-trigger" data-archive-switch-trigger aria-label={i18n(I18nKey.archiveFilter)} aria-controls="archive-view-options" aria-expanded="false" aria-pressed="false">
+					<SlidersHorizontal size={14} strokeWidth={1.6} aria-hidden="true" />
+					<span class="archive-panel__switch-label"><span>{i18n(I18nKey.archiveFilter)}</span></span>
+				</button>
+			</div>
+			<button type="button" class="archive-panel__bulk" data-archive-bulk aria-label={i18n(I18nKey.archiveCollapseAll)}>
+				<ChevronsDownUp size={14} strokeWidth={1.6} aria-hidden="true" />
+				<span data-archive-bulk-label>{i18n(I18nKey.archiveCollapseAll)}</span>
+			</button>
+		</div>
+	</div>
+
+	{tabs.map(({ id }) => (
+		<div id={`archive-view-${id}`} class="archive-panel__view" data-archive-view={id} data-archive-group-total={views[id].length} hidden={id !== "time"}>
+			<div class="archive-panel__tree" data-archive-tree>
+				<span class="archive-panel__highlight" data-archive-highlight aria-hidden="true" />
+				<span class="archive-panel__spine-focus" data-archive-spine-focus aria-hidden="true" />
+				{id === "time" ? <ArchiveTree nodes={views[id]} view={id} /> : <template data-archive-template><ArchiveTree nodes={views[id]} view={id} /></template>}
+			</div>
+		</div>
+	))}
+	<p class="archive-panel__empty" data-archive-empty hidden={sortedPosts.length > 0}>{i18n(I18nKey.noPosts)}</p>
+</section>
+
+<script>
+	import { registerArchivePanel } from "@/utils/archive-panel-controller";
+	registerArchivePanel();
+</script>

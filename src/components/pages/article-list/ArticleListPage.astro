@@ -1,0 +1,159 @@
+---
+import PageTitle from "@/components/common/PageTitle.astro";
+import ArticleList from "@/components/pages/article-list/ArticleList.astro";
+import { siteConfig } from "@/config";
+import { coverImageConfig } from "@/config/coverImageConfig";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import MainGridLayout from "@/layouts/MainGridLayout.astro";
+import type { ArticleListPost } from "@/types/article-list";
+import type { CoverImageSource } from "@/types/cover-image";
+import { getSortedPosts, splitPinnedPosts } from "@/utils/content-utils";
+import { buildCoverImage, COVER_IMAGE_WIDTH } from "@/utils/cover-image";
+import { getApiUrlList, processCoverImageSync } from "@/utils/image-utils";
+import { renderPostCached } from "@/utils/post-render";
+import { getFileDirFromPath, getPostUrlBySlug, url } from "@/utils/url-utils";
+import "@/styles/pages/article-list.css";
+
+interface Props {
+	currentPage?: number;
+}
+
+const { currentPage = 1 } = Astro.props;
+const allPosts = await getSortedPosts();
+const { carousel: pinnedEntries, rest: regularEntries } =
+	splitPinnedPosts(allPosts);
+const postsPerPage = Math.max(
+	1,
+	Math.floor(siteConfig.pagination.postsPerPage),
+);
+const totalPages = Math.max(1, Math.ceil(regularEntries.length / postsPerPage));
+const resolvedPage = Math.max(
+	1,
+	Math.min(totalPages, Math.floor(currentPage) || 1),
+);
+const startIndex = (resolvedPage - 1) * postsPerPage;
+const pageEntries = regularEntries.slice(startIndex, startIndex + postsPerPage);
+const { randomCoverImage } = coverImageConfig;
+// 兜底图只服务于随机图：随机图关闭时没写 image 的文章直接不渲染封面区域
+const fallbackImagePath = randomCoverImage.enable
+	? randomCoverImage.fallback || ""
+	: "";
+const fallbackImageUrl = fallbackImagePath ? url(fallbackImagePath) : "";
+const showCoverLoading = randomCoverImage.showLoading ?? true;
+
+const dateFormatter = new Intl.DateTimeFormat(
+	siteConfig.lang.replace("_", "-"),
+	{
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	},
+);
+
+function getCategoryHue(category: string): number {
+	let hash = 2166136261;
+	for (let index = 0; index < category.length; index++) {
+		hash ^= category.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+	return (hash >>> 0) % 360;
+}
+
+async function resolvePostCover(
+	entry: (typeof allPosts)[number],
+): Promise<CoverImageSource | null> {
+	const cover = await buildCoverImage({
+		image: processCoverImageSync(entry.data.image, entry.id),
+		basePath: getFileDirFromPath(entry.filePath || ""),
+		width: COVER_IMAGE_WIDTH,
+	});
+	if (cover) return cover;
+
+	// 没写 image、或本地文件缺失：只有随机图开启时才退到兜底图，否则不渲染封面
+	if (!fallbackImagePath) return null;
+	return buildCoverImage({
+		image: fallbackImagePath,
+		width: COVER_IMAGE_WIDTH,
+	});
+}
+
+async function createArticleListPost(
+	entry: (typeof allPosts)[number],
+): Promise<ArticleListPost> {
+	const [{ remarkPluginFrontmatter }, cover] = await Promise.all([
+		renderPostCached(entry),
+		resolvePostCover(entry),
+	]);
+	const rawCategory = entry.data.category?.trim();
+	const category = rawCategory || i18n(I18nKey.uncategorized);
+	const tags = (entry.data.tags || []).map((tag) => tag.trim()).filter(Boolean);
+
+	return {
+		id: entry.id,
+		title: entry.data.title,
+		url: getPostUrlBySlug(entry.id),
+		publishedIso: entry.data.published.toISOString(),
+		publishedTimestamp: entry.data.published.getTime(),
+		publishedText: dateFormatter.format(entry.data.published),
+		category,
+		categoryHue: getCategoryHue(category),
+		tags,
+		description:
+			entry.data.description ||
+			remarkPluginFrontmatter.excerpt ||
+			i18n(I18nKey.noDescriptionFallback),
+		pinned: !!entry.data.pinned,
+		password: !!entry.data.password,
+		wordCount: Number(remarkPluginFrontmatter.words) || 0,
+		cover,
+		apiUrls: getApiUrlList(entry.data.image, entry.id),
+	};
+}
+
+const [pinnedPosts, regularPosts] = await Promise.all([
+	Promise.all(pinnedEntries.map((entry) => createArticleListPost(entry))),
+	Promise.all(pageEntries.map((entry) => createArticleListPost(entry))),
+]);
+const baseTitle = i18n(I18nKey.postList);
+const baseDescription = i18n(I18nKey.listDescription);
+const pageStatus = i18n(I18nKey.paginationStatus)
+	.replace("{current}", String(resolvedPage))
+	.replace("{total}", String(totalPages));
+const title = resolvedPage === 1 ? baseTitle : `${baseTitle} - ${pageStatus}`;
+const description =
+	resolvedPage === 1 ? baseDescription : `${baseDescription} ${pageStatus}`;
+const umamiConfig = siteConfig.analytics?.umamiAnalytics;
+const umamiPageviews = {
+	enabled:
+		!!umamiConfig?.pageviews?.enabled &&
+		!!umamiConfig.shareId &&
+		!!umamiConfig.scriptUrl,
+	apiBase: umamiConfig?.scriptUrl ? new URL(umamiConfig.scriptUrl).origin : "",
+	shareId: umamiConfig?.shareId || "",
+};
+---
+
+<MainGridLayout title={title} description={description} hasOwnH1={true}>
+	<section class="article-list-page z-10 px-4 py-6 md:px-9 relative w-full">
+		<header class="article-list-page__header">
+			<PageTitle
+				title={baseTitle}
+				eyebrow="Posts"
+				description={i18n(I18nKey.postsMotto)}
+				variant="stacked"
+			/>
+		</header>
+
+		<ArticleList
+			pinnedPosts={pinnedPosts}
+			regularPosts={regularPosts}
+			totalPosts={allPosts.length}
+			currentPage={resolvedPage}
+			totalPages={totalPages}
+			umamiPageviews={umamiPageviews}
+			fallbackImageUrl={fallbackImageUrl}
+			showCoverLoading={showCoverLoading}
+		/>
+	</section>
+</MainGridLayout>

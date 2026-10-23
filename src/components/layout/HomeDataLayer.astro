@@ -1,0 +1,664 @@
+---
+import type { CollectionEntry } from "astro:content";
+import CoverImage from "@components/common/CoverImage.astro";
+import Icon from "@components/common/Icon.astro";
+import HomeGuideArt from "@components/layout/HomeGuideArt.astro";
+import HomeGuideFrame from "@components/layout/HomeGuideFrame.astro";
+import I18nKey from "@i18n/i18nKey";
+import { i18n } from "@i18n/translation";
+import { homeConfig, siteConfig } from "@/config";
+import type { CoverImageSource } from "@/types/cover-image";
+import {
+	getCategoryList,
+	getSortedPosts,
+	getTagList,
+} from "@/utils/content-utils";
+import { buildCoverImage, COVER_IMAGE_WIDTH } from "@/utils/cover-image";
+import { formatDateI18n } from "@/utils/date-utils";
+import {
+	countReadableCharacters,
+	formatCompactNumber,
+} from "@/utils/home-data-layer.js";
+import { getGuidePostSets } from "@/utils/home-guide-grid.js";
+import { processCoverImageSync } from "@/utils/image-utils";
+import {
+	getFileDirFromPath,
+	getPostUrlBySlug,
+	getTagIndexUrl,
+	url,
+} from "@/utils/url-utils";
+
+const posts = await getSortedPosts();
+const categories = await getCategoryList();
+const tags = await getTagList();
+const totalWords = posts.reduce(
+	(sum, post) => sum + countReadableCharacters(post.body || ""),
+	0,
+);
+
+/**
+ * 博客文章牌堆：置顶最多 3 篇 + 最新 5 篇，缩略态按这个顺序自动翻牌。
+ * 全部在构建期解析封面（含封面产物与 LQIP），不在客户端二次遍历。
+ */
+const DECK_PINNED_COUNT = 3;
+const DECK_RECENT_COUNT = 5;
+
+interface DeckItem {
+	index: number;
+	href: string;
+	title: string;
+	date: string;
+	isPinned: boolean;
+	cover: CoverImageSource | null;
+}
+
+const { pinned: pinnedPool, recent: recentPool } = getGuidePostSets(
+	posts,
+	DECK_RECENT_COUNT,
+);
+/** 全站的帖子都被置顶时 recent 会回落到同一批文章，按 id 去重避免牌堆里出现双份 */
+const deckPosts = Array.from(
+	new Map(
+		[...pinnedPool.slice(0, DECK_PINNED_COUNT), ...recentPool].map(
+			(post: CollectionEntry<"posts">) => [post.id, post],
+		),
+	).values(),
+);
+
+const deckItems: DeckItem[] = await Promise.all(
+	deckPosts.map(async (post, index) => {
+		const image = processCoverImageSync(post.data.image, post.id);
+		const cover = image
+			? await buildCoverImage({
+					image,
+					basePath: getFileDirFromPath(post.filePath || ""),
+					width: COVER_IMAGE_WIDTH,
+				})
+			: null;
+		return {
+			index,
+			href: getPostUrlBySlug(post.id),
+			title: post.data.title,
+			date: formatDateI18n(post.data.published),
+			isPinned: Boolean(post.data.pinned),
+			cover,
+		};
+	}),
+);
+
+/** 展开态手风琴的两组：沿用牌堆里的下标，悬停哪一条就切到哪张封面 */
+const deckGroups = [
+	{
+		label: i18n(I18nKey.pinnedPosts),
+		icon: "material-symbols:bookmark-outline",
+		items: deckItems.filter((item) => item.isPinned),
+	},
+	{
+		label: i18n(I18nKey.latestUpdates),
+		icon: "material-symbols:history",
+		items: deckItems.filter((item) => !item.isPinned),
+	},
+].filter((group) => group.items.length > 0);
+
+// getTagList / getCategoryList 已按篇数倒序，直接截取即为「最多的那几个」
+const topCategories = categories.slice(0, 4);
+const topTags = tags.slice(0, 6);
+
+/**
+ * 内容索引的两组：手风琴展开后不是一列文字，而是一行四张的小卡。
+ * 末尾固定补一张「查看全部」，所以既传截取的篇数也传全站总数。
+ */
+interface IndexCard {
+	name: string;
+	count: number;
+	url: string;
+}
+
+const indexGroups = [
+	{
+		label: i18n(I18nKey.categoryIndex),
+		icon: "material-symbols:folder-outline-rounded",
+		cards: topCategories.map(
+			(category): IndexCard => ({
+				name: category.name,
+				count: category.count,
+				url: category.url,
+			}),
+		),
+		allLabel: i18n(I18nKey.viewAll),
+		allNote: `${categories.length}${i18n(I18nKey.categoryUnit)}`,
+		allUrl: url("/categories/"),
+	},
+	{
+		label: i18n(I18nKey.tagIndex),
+		icon: "material-symbols:label",
+		cards: topTags.map(
+			(tag): IndexCard => ({
+				name: `#${tag.name}`,
+				count: tag.count,
+				url: tag.url,
+			}),
+		),
+		allLabel: i18n(I18nKey.browseAllTags),
+		allNote: `${tags.length}${i18n(I18nKey.tagUnit)}`,
+		allUrl: getTagIndexUrl(),
+	},
+].filter((group) => group.cards.length > 0);
+
+/* ---- 内容索引：分类剧场 ----
+   提示框里打出「有多少个分类」，虚线分下去，三张圆盘是篇数最多的三个分类。
+   圆盘里放该分类最新一篇文章的封面，所以取图口径要和牌堆一致（构建期解析）。 */
+const SCENE_AGENT_COUNT = 3;
+/** 三条分支：左右两条从提示框底沿弓出去，中间笔直向下，端点落在圆盘顶沿 */
+const SCENE_LINES = [
+	"M300 110C300 162 102 152 102 196",
+	"M300 110V196",
+	"M300 110C300 162 498 152 498 196",
+];
+
+/** 分类名归一，口径与 getCategoryList 内部完全一致，否则对不上计数 */
+function categoryOf(post: (typeof posts)[number]): string {
+	const raw = post.data.category;
+	if (!raw) return i18n(I18nKey.uncategorized);
+	const name = (typeof raw === "string" ? raw : String(raw)).trim();
+	return name || i18n(I18nKey.uncategorized);
+}
+
+/** posts 已按发布时间倒序，每个分类第一次命中的那篇就是最新的 */
+const leadPostByCategory = new Map<string, (typeof posts)[number]>();
+for (const post of posts) {
+	const name = categoryOf(post);
+	if (!leadPostByCategory.has(name)) leadPostByCategory.set(name, post);
+}
+
+interface SceneAgent {
+	name: string;
+	count: number;
+	cover: CoverImageSource | null;
+}
+
+const sceneAgents: SceneAgent[] = await Promise.all(
+	categories.slice(0, SCENE_AGENT_COUNT).map(async (category) => {
+		const lead = leadPostByCategory.get(category.name);
+		const image = lead ? processCoverImageSync(lead.data.image, lead.id) : "";
+		const cover =
+			image && lead
+				? await buildCoverImage({
+						image,
+						basePath: getFileDirFromPath(lead.filePath || ""),
+						width: COVER_IMAGE_WIDTH,
+					})
+				: null;
+		return { name: category.name, count: category.count, cover };
+	}),
+);
+
+const scenePrompt = i18n(I18nKey.categoryCountPrompt).replace(
+	"{count}",
+	String(categories.length),
+);
+
+const contactLinks = homeConfig.links.map((link) => ({
+	name: link.name,
+	icon: link.icon,
+	href: link.url,
+	color: link.color,
+}));
+/** 缩略态只亮 hero.contact 指定的那一个平台，其余端点等展开后再出现 */
+const primaryContact =
+	contactLinks.find(
+		(link) => link.name === homeConfig.hero.contact?.platform,
+	) ?? contactLinks[0];
+
+const umamiConfig = siteConfig.analytics?.umamiAnalytics;
+const statsBaseUrl = umamiConfig?.scriptUrl
+	? new URL(umamiConfig.scriptUrl).origin
+	: "";
+const statsShareId = umamiConfig?.shareId ?? "";
+
+/** 卡片外壳：4 张卡共用同一骨架，只有插画、详情与文案不同 */
+const guideCards = [
+	{ id: "stats", title: I18nKey.siteData, hint: I18nKey.siteDataSubtitle },
+	{
+		id: "posts",
+		title: I18nKey.blogPosts,
+		hint: I18nKey.blogPostsSubtitle,
+	},
+	{
+		id: "index",
+		title: I18nKey.contentIndex,
+		hint: I18nKey.contentIndexSubtitle,
+	},
+	{
+		id: "contact",
+		title: I18nKey.subscribeContact,
+		hint: I18nKey.subscribeContactSubtitle,
+	},
+] as const;
+
+/**
+ * 站点数据六项：文章 / 分类 / 标签各自独立一层，不合并成一条长文本。
+ * compact 给缩略态的单张读数，full 给展开态卡牌。
+ * UV / PV 两项运行时由 Umami 回填，这里先占 --。
+ */
+const statBoxes: {
+	mod: string;
+	label: string;
+	compact: string;
+	full: string;
+	statKind?: "UV" | "PV";
+}[] = [
+	{
+		mod: "uv",
+		label: i18n(I18nKey.siteStatsVisitors),
+		compact: "--",
+		full: "--",
+		statKind: "UV",
+	},
+	{
+		mod: "pv",
+		label: i18n(I18nKey.viewsLabel),
+		compact: "--",
+		full: "--",
+		statKind: "PV",
+	},
+	{
+		mod: "posts",
+		label: i18n(I18nKey.siteStatsPostCount),
+		compact: String(posts.length),
+		full: String(posts.length),
+	},
+	{
+		mod: "cats",
+		label: i18n(I18nKey.siteStatsCategoryCount),
+		compact: String(categories.length),
+		full: String(categories.length),
+	},
+	{
+		mod: "tags",
+		label: i18n(I18nKey.siteStatsTagCount),
+		compact: String(tags.length),
+		full: String(tags.length),
+	},
+	{
+		mod: "words",
+		label: i18n(I18nKey.wordCount),
+		compact: formatCompactNumber(totalWords),
+		full: totalWords.toLocaleString(),
+	},
+];
+---
+
+<section
+	class="home-data-layer"
+	id="home-data-layer"
+	aria-labelledby="home-guide-heading"
+	data-stats-base-url={statsBaseUrl}
+	data-stats-share-id={statsShareId}
+>
+	<HomeGuideFrame />
+	<h2 class="home-data-layer__sr-heading" id="home-guide-heading">{i18n(I18nKey.mapGuide)}</h2>
+	<div class="home-guide">
+		{guideCards.map((card, index) => (
+			<article
+				class="guide-card"
+				data-guide-card={card.id}
+				style={`--enter-index:${index}`}
+				tabindex="0"
+				aria-expanded="false"
+				aria-controls={`guide-detail-${card.id}`}
+			>
+				<div class="guide-card__stage">
+					<div class:list={["guide-card__art", { "guide-card__art--fill": card.id === "contact" }]}>
+						{card.id === "stats" && <HomeGuideArt variant="stats" statBoxes={statBoxes} />}
+						{card.id === "posts" && (
+							<div
+								class="post-deck"
+								data-post-deck
+								style={`--deck-n:${deckItems.length};`}
+							>
+								{deckItems.map((item, i) => (
+									<a
+										class="post-card"
+										href={item.href}
+										draggable="false"
+										tabindex={i === 0 ? 0 : -1}
+										inert={i !== 0}
+										data-post-card={i}
+										data-on={i === 0 ? "" : undefined}
+										style={`--depth:${i};`}
+									>
+										{item.cover ? (
+											<div class="post-card__media">
+												<CoverImage
+													cover={item.cover}
+													alt={item.title}
+													class="post-card__img"
+													loading={i < 3 ? "eager" : "lazy"}
+												/>
+											</div>
+										) : (
+											<div class="post-card__media post-card__media--empty" />
+										)}
+										<div class="post-card__body">
+											<p class="post-card__title">{item.title}</p>
+											<p class="post-card__meta">
+												{item.isPinned && (
+													<span class="post-card__badge">{i18n(I18nKey.pinned)}</span>
+												)}
+												<span class="post-card__date">{item.date}</span>
+											</p>
+										</div>
+									</a>
+								))}
+							</div>
+						)}
+						{card.id === "index" && (
+							<div
+								class="index-scene"
+								data-index-scene
+								data-scene-phase="team"
+								role="img"
+								aria-label={`${scenePrompt}：${sceneAgents.map((agent) => `${agent.name} ${agent.count}`).join(" / ")}`}
+							>
+								<svg
+									class="index-scene__lines"
+									viewBox="0 0 600 400"
+									aria-hidden="true"
+								>
+									<defs>
+										{SCENE_LINES.slice(0, sceneAgents.length).map(
+											(d, i) => (
+												<mask
+													id={`index-scene-reveal-${i}`}
+													maskUnits="userSpaceOnUse"
+													x="0"
+													y="0"
+													width="600"
+													height="400"
+												>
+													<path
+														class="index-scene__reveal"
+														pathLength="1"
+														d={d}
+													/>
+												</mask>
+											),
+										)}
+									</defs>
+									{SCENE_LINES.slice(0, sceneAgents.length).map(
+										(d, i) => (
+											<path
+												class="index-scene__line"
+												d={d}
+												mask={`url(#index-scene-reveal-${i})`}
+											/>
+										),
+									)}
+								</svg>
+
+								<div class="index-scene__halo" aria-hidden="true" />
+
+								<div class="index-scene__prompt" aria-hidden="true">
+									<span class="index-scene__text">
+										<span data-scene-text>{scenePrompt}</span>
+										<span class="index-scene__caret" />
+									</span>
+									<span class="index-scene__send">
+										<svg viewBox="0 0 24 24" aria-hidden="true">
+											<path d="M12 18.5v-13M6.5 11 12 5.5l5.5 5.5" />
+										</svg>
+									</span>
+								</div>
+
+								{sceneAgents.map((agent, i) => (
+									<div
+										class="index-scene__agent"
+										style={`--agent-x:${102 + i * 198};--i:${i};`}
+									>
+										<div class="index-scene__node">
+											<span class="index-scene__face">
+												{agent.cover ? (
+													<CoverImage
+														cover={agent.cover}
+														alt=""
+														class="index-scene__img"
+													/>
+												) : (
+													<span class="index-scene__initial">
+														{agent.name.slice(0, 1)}
+													</span>
+												)}
+											</span>
+											<span class="index-scene__dot" />
+										</div>
+										<div class="index-scene__role">
+											<span class="index-scene__tools">
+												<span class="index-scene__tool">
+													{agent.count}
+												</span>
+											</span>
+											<span class="index-scene__name">{agent.name}</span>
+										</div>
+									</div>
+								))}
+							</div>
+						)}
+						{card.id === "contact" && (
+							<HomeGuideArt
+								variant="contact"
+								links={contactLinks}
+								primary={primaryContact}
+							/>
+						)}
+					</div>
+					<div class:list={["guide-card__detail", { "guide-card__detail--always": card.id === "stats" }]} id={`guide-detail-${card.id}`}>
+						{card.id === "stats" && (
+							<div class="stat-readout">
+								{statBoxes.map((box, i) => (
+									<div
+										class="stat-card"
+										data-stat-card={i}
+										data-on={i === 0 ? "" : undefined}
+										style={`--stat-i:${i};`}
+									>
+										<p class="stat-card__label">{box.label}</p>
+										<p class="stat-card__value">
+											<span class="stat-card__compact" data-stat-compact={box.statKind || undefined}>{box.compact}</span>
+											<span class="stat-card__full" data-stat-full={box.statKind || undefined}>{box.full}</span>
+										</p>
+									</div>
+								))}
+							</div>
+						)}
+						{card.id === "posts" && (
+							<ul class="acc" data-acc>
+								{deckGroups.map((group, gi) => (
+									<li class="acc__item" data-open={gi === 0 ? "" : undefined}>
+										<button
+											class="acc__head"
+											type="button"
+											aria-expanded={gi === 0}
+											data-acc-head
+										>
+											<span class="acc__icon">
+												<Icon name={group.icon} is:inline />
+											</span>
+											<span class="acc__title">{group.label}</span>
+											<span class="acc__count">{group.items.length}</span>
+											<span class="acc__chevron" aria-hidden="true" />
+										</button>
+										<div class="acc__panel">
+											<div class="acc__content">
+												<ul class="acc__rows">
+													{group.items.map((item) => (
+														<li>
+															<a
+																class="acc__row"
+																href={item.href}
+																data-post-pick={item.index}
+															>
+																<span class="acc__row-title">{item.title}</span>
+																<span class="acc__row-date">{item.date}</span>
+															</a>
+														</li>
+													))}
+												</ul>
+											</div>
+										</div>
+									</li>
+								))}
+							</ul>
+						)}
+						{card.id === "index" && (
+							<ul class="acc" data-acc>
+								{indexGroups.map((group, gi) => (
+									<li class="acc__item" data-open={gi === 0 ? "" : undefined}>
+										<button
+											class="acc__head"
+											type="button"
+											aria-expanded={gi === 0}
+											data-acc-head
+										>
+											<span class="acc__icon">
+												<Icon name={group.icon} is:inline />
+											</span>
+											<span class="acc__title">{group.label}</span>
+											<span class="acc__count">{group.cards.length}</span>
+											<span class="acc__chevron" aria-hidden="true" />
+										</button>
+										<div class="acc__panel">
+											<div class="acc__content">
+												<ul class="acc__cards">
+													{group.cards.map((item) => (
+														<li>
+															<a class="acc__card" href={item.url}>
+																<span class="acc__card-name">{item.name}</span>
+																<span class="acc__card-count">{item.count}</span>
+															</a>
+														</li>
+													))}
+													<li>
+														<a class="acc__card acc__card--all" href={group.allUrl}>
+															<span class="acc__card-name">{group.allLabel}</span>
+															<span class="acc__card-count">{group.allNote}</span>
+														</a>
+													</li>
+												</ul>
+											</div>
+										</div>
+									</li>
+								))}
+							</ul>
+						)}
+						{card.id === "contact" && (
+							<ul class="guide-links">
+								{contactLinks.map((link) => (
+									<li>
+										<a
+											href={link.href}
+											rel="noopener noreferrer"
+											target={link.href.startsWith("http") ? "_blank" : undefined}
+											style={link.color ? `--brand:${link.color}` : undefined}
+										>
+											<span class="guide-links__icon">
+												<Icon name={link.icon} is:inline />
+											</span>
+											<span>{link.name}</span>
+										</a>
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
+				</div>
+				<footer class="guide-card__meta">
+					<div class="guide-card__meta-text">
+						<h3 class="guide-card__title">{i18n(card.title)}</h3>
+						<p class="guide-card__hint">{i18n(card.hint)}</p>
+					</div>
+				</footer>
+			</article>
+		))}
+	</div>
+</section>
+
+<script>
+	import { createCache } from "@/utils/cache-utils";
+	import { formatCompactNumber } from "@/utils/home-data-layer.js";
+	import { bootHomeGuide } from "@/utils/home-guide-controller";
+	import { bootHomeIndexScene } from "@/utils/home-index-scene-controller";
+	import { bindHomeLayer } from "@/utils/home-lifecycle";
+	import { waitForPageLoaderHidden } from "@/utils/page-loader-controller.js";
+
+	type Cleanup = () => void;
+	type ShareData = { websiteId: string; token: string };
+
+	let cleanups: Cleanup[] = [];
+
+	function cleanupHomeDataLayer() {
+		cleanups.reverse().forEach((cleanup) => cleanup());
+		cleanups = [];
+	}
+
+	/** 缩略态在插画端点上给缩写值，详细态在右栏给完整值，一次写齐两处 */
+	function writeStat(layer: HTMLElement, kind: "UV" | "PV", raw: number | null) {
+		const compactNode = layer.querySelector<HTMLElement>(`[data-stat-compact="${kind}"]`);
+		const fullNode = layer.querySelector<HTMLElement>(`[data-stat-full="${kind}"]`);
+		if (compactNode) compactNode.textContent = raw === null ? "--" : formatCompactNumber(raw);
+		if (fullNode) fullNode.textContent = raw === null ? "--" : raw.toLocaleString();
+	}
+
+	function initVisitStats(layer: HTMLElement) {
+		const statsBaseUrl = layer.dataset.statsBaseUrl;
+		const statsShareId = layer.dataset.statsShareId;
+		if (!statsBaseUrl || !statsShareId) return;
+		const controller = new AbortController();
+		const { signal } = controller;
+		cleanups.push(() => controller.abort());
+		// 保留持久缓存键和 TTL，但不让新挂载复用上一挂载已中止的 in-flight。
+		const shareCache = createCache<ShareData>({ key: "umami_share_data", ttl: 3_600_000 });
+		shareCache.fetch(async () => {
+			const response = await fetch(`${statsBaseUrl}/api/share/${statsShareId}`, { signal });
+			if (!response.ok) throw new Error("获取 Umami 分享信息失败");
+			const share: { websiteId?: string; entityId?: string; token?: string } = await response.json();
+			signal.throwIfAborted();
+			const websiteId = share.websiteId || share.entityId;
+			if (!websiteId) throw new Error("Umami 分享信息缺少 websiteId");
+			return { websiteId, token: share.token || statsShareId };
+		}).then(({ websiteId, token }) => fetch(`${statsBaseUrl}/api/websites/${websiteId}/stats?startAt=0&endAt=${Date.now()}`, {
+			signal,
+			headers: { "x-umami-share-token": token, "x-umami-share-context": "1", "Content-Type": "application/json" },
+		})).then((response) => {
+			if (!response.ok) throw new Error("获取 Umami 统计信息失败");
+			return response.json();
+		}).then((data: { uv?: number; visitors?: number; pv?: number; pageviews?: number }) => {
+			if (signal.aborted || !layer.isConnected) return;
+			writeStat(layer, "UV", data.uv ?? data.visitors ?? 0);
+			writeStat(layer, "PV", data.pv ?? data.pageviews ?? 0);
+		}).catch(() => {
+			// 主动中止不是失败，不要把已写好的数值覆盖回占位符
+			if (signal.aborted || !layer.isConnected) return;
+			writeStat(layer, "UV", null);
+			writeStat(layer, "PV", null);
+		});
+	}
+
+	async function initHomeDataLayer() {
+		cleanupHomeDataLayer();
+		const layer = document.getElementById("home-data-layer");
+		if (!layer) return;
+		initVisitStats(layer);
+		// 加载页还盖着时就开始描线等于白播；该函数自带 10s 上限，不会永久挂住
+		await waitForPageLoaderHidden();
+		if (!layer.isConnected) return;
+		cleanups.push(bootHomeGuide(layer));
+		cleanups.push(bootHomeIndexScene(layer));
+	}
+
+	// 容器替换前清理（bindHomeLayer 内部挂的是 astro:before-swap）：
+	// swup 4 的 DOM 事件名是冒号分段的（swup:content:replace），旧的 swup:willReplaceContent
+	// 永远不会触发；而 @swup/astro 派发的 astro:before-swap 挂在
+	// hooks.before("content:replace") 上，正是要的那个时机
+	bindHomeLayer("data-layer", { media: "(min-width: 769px)", boot: initHomeDataLayer, teardown: cleanupHomeDataLayer });
+</script>

@@ -1,0 +1,316 @@
+---
+import { Picture } from "astro:assets";
+import * as path from "node:path";
+import Icon from "@components/common/Icon.astro";
+import ProfileCardSiteAvatar from "@components/layout/ProfileCardSiteAvatar.astro";
+import type { ImageMetadata } from "astro";
+import { footerConfig, homeConfig, navBarConfig, siteConfig } from "@/config";
+import { LinkPresets } from "@/constants/link-presets";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import { LinkPreset } from "@/types/config";
+import { getFallbackFormat, getImageFormats } from "@/utils/image-utils";
+import { url } from "@/utils/url-utils";
+
+const aboutLink = LinkPresets[LinkPreset.About];
+const displayName = homeConfig.displayName || homeConfig.name;
+const locale = siteConfig.lang.replace("_", "-");
+
+// 卡片图片解析：src 目录（构建期优化）/ public（"/" 开头）/ 远程 URL，
+// 三种约定与 Navbar logo 一致；头像与横幅共用这一份实现
+const cardImageFiles = import.meta.glob<ImageMetadata>(
+	"../../**/*.{png,jpg,jpeg,webp,avif,gif,svg}",
+	{ import: "default" },
+);
+
+type ResolvedCardImage =
+	| { kind: "optimized"; meta: ImageMetadata }
+	| { kind: "direct"; src: string }
+	| { kind: "none" };
+
+async function resolveCardImage(value: string): Promise<ResolvedCardImage> {
+	if (!value) return { kind: "none" };
+	if (value.startsWith("/")) return { kind: "direct", src: url(value) };
+	if (value.startsWith("http")) return { kind: "direct", src: value };
+	const normalizedPath = path
+		.normalize(path.join("../../", value))
+		.replace(/\\/g, "/");
+	const file = cardImageFiles[normalizedPath];
+	if (!file) return { kind: "none" };
+	return { kind: "optimized", meta: await file() };
+}
+
+const avatarImage = await resolveCardImage(siteConfig.avatar.owner || "");
+const bannerImage = await resolveCardImage(homeConfig.avatarBanner || "");
+
+// 横幅两层同时渲染：糊化头像垫底，真横幅压在上层，
+// 横幅缺位或加载失败时（控制器写 data-profile-banner-state）自然露出垫底
+interface BannerLayerDef {
+	slotClass: string;
+	/** 控制器据此定位内层 img 接 error 事件，只挂在横幅上层 */
+	isBannerImg: boolean;
+	meta: ImageMetadata | null;
+	directSrc: string;
+	widths: number[];
+}
+
+function toBannerLayer(
+	image: ResolvedCardImage,
+	slotClass: string,
+	isBannerImg: boolean,
+	widths: number[],
+): BannerLayerDef | null {
+	if (image.kind === "none") return null;
+	return image.kind === "optimized"
+		? { slotClass, isBannerImg, meta: image.meta, directSrc: "", widths }
+		: { slotClass, isBannerImg, meta: null, directSrc: image.src, widths };
+}
+
+const bannerLayers: BannerLayerDef[] = [
+	toBannerLayer(avatarImage, "profile-card__banner-slot--blur", false, [64]),
+	toBannerLayer(
+		bannerImage,
+		"profile-card__banner-slot--main",
+		true,
+		[336, 672],
+	),
+].filter((layer): layer is BannerLayerDef => layer !== null);
+
+// 底部站点面板：折叠态只堆叠前 3 个站点图标，展开后列出全部站点
+const sites = navBarConfig.personalSites;
+const STACK_LIMIT = 3;
+
+// 热力图构建期静态渲染：12 列（月）× 4 行（月内 7 天切块）+ 顶部月份名，
+// 数据到达后控制器只补计数色阶与提示文案，不再重建 DOM
+const monthFormatter = new Intl.DateTimeFormat(locale, { month: "short" });
+const monthNames = Array.from({ length: 12 }, (_, month) =>
+	monthFormatter.format(new Date(2000, month, 1)),
+);
+const formatWeekLabel = (month: number, week: number): string =>
+	i18n(I18nKey.profileMonthWeek)
+		.replace("{month}", monthNames[month])
+		.replace("{week}", String(week + 1));
+
+const profileConfig = JSON.stringify({
+	api: { posts: url("/api/allPostMeta.json") },
+	postBaseUrl: url("/posts/"),
+	locale,
+	labels: {
+		weekFormat: i18n(I18nKey.profileMonthWeek),
+		postCount: i18n(I18nKey.profilePostCount),
+	},
+});
+---
+
+<div class="navbar-profile-dropdown" data-navbar-profile-panel>
+	<div class="navbar-profile-mask" data-profile-mask aria-hidden="true"></div>
+	<div
+		class:list={[
+			"profile-card",
+			sites.length > 0 && "profile-card--has-sites",
+		]}
+		data-profile-card
+		data-profile-config={profileConfig}
+		aria-busy="true"
+	>
+		<!-- 第一层：横幅 + 头像堆叠 -->
+		<div class="profile-card__header">
+			<div class="profile-card__banner">
+				{bannerLayers.map((layer) => (
+					<div
+						class={`profile-card__banner-slot ${layer.slotClass}`}
+						{...(layer.isBannerImg ? { "data-profile-banner-img": "" } : {})}
+					>
+						{layer.meta ? (
+							layer.meta.format === "svg" ? (
+								<img src={layer.meta.src} alt="" loading="lazy" decoding="async" />
+							) : (
+								<Picture
+									src={layer.meta}
+									alt=""
+									formats={getImageFormats()}
+									fallbackFormat={getFallbackFormat()}
+									widths={layer.widths}
+									loading="lazy"
+								/>
+							)
+						) : (
+							<img src={layer.directSrc} alt="" loading="lazy" decoding="async" />
+						)}
+					</div>
+				))}
+			</div>
+			<a
+				class="profile-card__avatar"
+				href={url(aboutLink.url)}
+				aria-label={aboutLink.name}
+			>
+				{avatarImage.kind === "optimized" ? (
+					avatarImage.meta.format === "svg" ? (
+						<img src={avatarImage.meta.src} alt="" class="profile-card__avatar-img" loading="lazy" decoding="async" />
+					) : (
+						<Picture
+							src={avatarImage.meta}
+							alt=""
+							class="profile-card__avatar-img"
+							formats={getImageFormats()}
+							fallbackFormat={getFallbackFormat()}
+							widths={[96, 192]}
+							loading="lazy"
+						/>
+					)
+				) : avatarImage.kind === "direct" ? (
+					<img
+						src={avatarImage.src}
+						alt=""
+						class="profile-card__avatar-img"
+						loading="lazy"
+						decoding="async"
+					/>
+				) : (
+					<span class="profile-card__avatar-fallback">{displayName.slice(0, 1)}</span>
+				)}
+				<!-- 悬停遮罩：头像本身也是关于页入口 -->
+				<span class="profile-card__avatar-mask">
+					<span class="profile-card__avatar-mask-text">{aboutLink.name}</span>
+				</span>
+			</a>
+		</div>
+
+		<!-- 第二层：名字 / 职业（整块跳关于页）+ 社交入口 -->
+		<a
+			class="profile-card__identity"
+			href={url(aboutLink.url)}
+			aria-label={aboutLink.name}
+		>
+			<span class="profile-card__identity-text">
+				<strong class="profile-card__name">{displayName}</strong>
+				{homeConfig.occupation && <span class="profile-card__occupation">{homeConfig.occupation}</span>}
+			</span>
+		</a>
+
+		<div class="profile-card__socials">
+			{footerConfig.socialLinks.map((social) => {
+				const isDirect = social.href.startsWith("mailto:") || social.href.startsWith("tel:");
+				return (
+					<a
+						class="profile-card__social-btn"
+						href={social.href}
+						target={isDirect ? undefined : "_blank"}
+						rel={isDirect ? undefined : "noopener noreferrer"}
+						aria-label={social.label}
+						data-tooltip-label={social.label}
+					>
+						<Icon name={social.icon} is:inline />
+					</a>
+				);
+			})}
+		</div>
+
+		<!-- 第三层：内容区，热力图 + 点格内联展开的该周文章 -->
+		<div class="profile-card__content" data-profile-content>
+			<div
+				class="profile-card__heatmap"
+				data-profile-heatmap
+				role="group"
+				aria-label={i18n(I18nKey.profileHeatmap)}
+			>
+				{Array.from({ length: 12 }, (_, month) => (
+					<div class="profile-card__heat-col">
+						<span class="profile-card__heat-month" aria-hidden="true">{monthNames[month]}</span>
+						{Array.from({ length: 4 }, (_, week) => {
+							const label = formatWeekLabel(month, week);
+							return (
+								<button
+									type="button"
+									class="profile-card__heat-cell"
+									data-profile-cell={`${month}-${week}`}
+									data-tooltip-label={label}
+									aria-label={label}
+									aria-pressed="false"
+								/>
+							);
+						})}
+					</div>
+				))}
+			</div>
+
+			<!-- 点格内联展开该周文章 -->
+			<div class="profile-card__week-posts" data-profile-week hidden>
+				<p class="profile-card__posts-title" data-profile-posts-title></p>
+				<div class="profile-card__post-list" data-profile-post-list></div>
+			</div>
+		</div>
+
+		<!-- 站点面板：贴在卡片底部的浮层，展开后向上覆盖内容区（第四层） -->
+		{sites.length > 0 && (
+			<div
+				class="profile-card__sites"
+				id="profile-sites-panel"
+				data-profile-sites
+				data-profile-sites-open="false"
+			>
+				<div class="profile-card__sites-bar" data-profile-sites-bar>
+					<span class="profile-card__sites-label">{i18n(I18nKey.otherSites)}</span>
+					<span class="profile-card__sites-stack" data-profile-sites-stack>
+						{sites.slice(0, STACK_LIMIT).map((site, index) => (
+							<ProfileCardSiteAvatar site={site} index={index} />
+						))}
+					</span>
+					<button
+						type="button"
+						class="profile-card__sites-toggle"
+						data-profile-sites-toggle
+						aria-expanded="false"
+						aria-controls="profile-sites-panel"
+						aria-label={i18n(I18nKey.otherSites)}
+					>
+						<svg
+							class="profile-card__sites-chevron"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<path d="m16 10-4 4-4-4" />
+						</svg>
+					</button>
+				</div>
+
+				<ul class="profile-card__sites-list" data-profile-sites-list>
+					{sites.map((site, index) => (
+						<li>
+							<a
+								class="profile-card__site-row"
+								href={site.url}
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								<ProfileCardSiteAvatar site={site} index={index} />
+								<span class="profile-card__site-name">{site.name}</span>
+								<Icon name="fa7-solid:arrow-up-right-from-square" is:inline class="profile-card__site-arrow" />
+							</a>
+						</li>
+					))}
+				</ul>
+			</div>
+		)}
+
+		<!-- 热力图提示浮层：与内容区同级，不受页内 overflow 裁剪，由控制器定位 -->
+		<div class="profile-card__tooltip" data-profile-tooltip aria-hidden="true"></div>
+	</div>
+</div>
+
+<!-- 样式见 src/styles/layout/navbar-profile-card.css -->
+
+<script>
+	import { initNavbarProfileCard } from "@/utils/navbar-profile-controller";
+	import { definePersistentIsland } from "@/utils/swup-lifecycle";
+
+	// 面板在 Swup 容器之外，常驻只需初始化一次
+	definePersistentIsland("navbar-profile-card", initNavbarProfileCard);
+</script>

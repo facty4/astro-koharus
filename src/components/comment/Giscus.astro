@@ -1,0 +1,60 @@
+---
+import { commentConfig } from "@/config";
+
+if (!commentConfig?.giscus) {
+	throw new Error("Giscus comments are not configured");
+}
+
+const giscus = commentConfig.giscus;
+---
+
+<!-- Giscus 评论容器 -->
+<div class="giscus"></div>
+
+<script is:inline define:vars={{ giscus }}>
+  function getGiscusTheme() {
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  }
+
+  function syncGiscusTheme() {
+    var iframe = document.querySelector('iframe.giscus-frame');
+    if (!iframe) return;
+    iframe.contentWindow.postMessage({ giscus: { setConfig: { theme: getGiscusTheme() } } }, 'https://giscus.app');
+  }
+
+  function loadGiscus() {
+    var container = document.querySelector('.giscus');
+    if (!container) return;
+    container.innerHTML = '';
+
+    var s = document.createElement('script');
+    s.src = 'https://giscus.app/client.js';
+    s.setAttribute('data-repo', giscus.repo);
+    s.setAttribute('data-repo-id', giscus.repoId);
+    s.setAttribute('data-category', giscus.category);
+    s.setAttribute('data-category-id', giscus.categoryId);
+    s.setAttribute('data-mapping', giscus.mapping);
+    s.setAttribute('data-strict', giscus.strict);
+    s.setAttribute('data-reactions-enabled', giscus.reactionsEnabled);
+    s.setAttribute('data-emit-metadata', giscus.emitMetadata);
+    s.setAttribute('data-input-position', giscus.inputPosition);
+    s.setAttribute('data-theme', getGiscusTheme());
+    s.setAttribute('data-lang', giscus.lang);
+    s.setAttribute('data-loading', giscus.loading);
+    s.crossOrigin = 'anonymous';
+    s.async = true;
+    container.appendChild(s);
+  }
+
+  // 本脚本是 is:inline 且没有 data-swup-ignore-script，SwupScriptsPlugin 会在每次
+  // content:replace 时把它整段重新执行一遍，所以这句顶层调用已经同时覆盖了
+  // 首次加载和每次导航。原先还额外挂了一个 content:replace 钩子去 setTimeout(loadGiscus, 200)，
+  // 那是在同一次导航里把评论区又装了一遍
+  loadGiscus();
+
+  // theme-change 是常驻监听，必须防住上面说的重复执行，否则每访问一次评论页就多叠一个
+  if (!window.__giscus_listeners_done) {
+    window.__giscus_listeners_done = true;
+    window.addEventListener('theme-change', syncGiscusTheme);
+  }
+</script>

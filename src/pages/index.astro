@@ -1,0 +1,31 @@
+---
+import HeroDialogue from "@components/layout/HeroDialogue.astro";
+import HomeBlinds from "@components/layout/HomeBlinds.astro";
+import HomeDataLayer from "@components/layout/HomeDataLayer.astro";
+import HomeHero from "@components/layout/HomeHero.astro";
+import HomeMobile from "@components/layout/HomeMobile.astro";
+import SiteStructuredData from "@/components/seo/SiteStructuredData.astro";
+import { siteConfig } from "@/config";
+import MainGridLayout from "@/layouts/MainGridLayout.astro";
+import "@/styles/components/home-data-layer.css";
+import "@/styles/components/home-hero-dialogue.css";
+import "@/styles/components/home-hero.css";
+import "@/styles/components/home-section.css";
+import "@/styles/components/home-mobile.css";
+import "@/styles/components/home-blinds.css";---
+
+<MainGridLayout
+	title="WA 的一声就哭了"
+	description={siteConfig.description}
+	hasOwnH1={true}
+>
+	<SiteStructuredData slot="head" />
+	<div class="home-page home-page--motion-pending">
+		<HomeHero />
+		<HomeDataLayer />
+		{/* 左下角角色是 sticky 的，必须排在第二层之后，才会一路停到第二层底部 */}
+		<HeroDialogue />
+		<HomeBlinds />
+		<HomeMobile />
+	</div>
+</MainGridLayout>

@@ -1,0 +1,212 @@
+---
+import Icon from "@components/common/Icon.astro";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+
+interface Props {
+	title?: string;
+	open?: boolean;
+}
+
+const { title = "展开查看", open = false } = Astro.props;
+---
+
+<div class="mdx-folding" data-folding data-open={open ? "" : undefined}>
+	<button
+		class="mdx-folding__summary"
+		type="button"
+		data-folding-trigger
+		aria-expanded={open ? "true" : "false"}
+	>
+		<span class="mdx-folding__chevron" aria-hidden="true">
+			<Icon name="material-symbols:keyboard-arrow-down-rounded" />
+		</span>
+		<span class="mdx-folding__title">{title}</span>
+		<span class="mdx-folding__action" aria-hidden="true">
+			<span class="mdx-folding__action-expand">{i18n(I18nKey.expand)}</span>
+			<span class="mdx-folding__action-collapse">{i18n(I18nKey.collapse)}</span>
+		</span>
+	</button>
+	<div class="mdx-folding__panel">
+		<div class="mdx-folding__panel-inner">
+			<div class="mdx-folding__body"><slot /></div>
+		</div>
+	</div>
+</div>
+
+<script is:inline>
+	(function () {
+		if (window.__mdxFoldingReady) return;
+		window.__mdxFoldingReady = true;
+
+		document.addEventListener("click", function (event) {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			const trigger = target.closest("[data-folding-trigger]");
+			if (!trigger) return;
+			const root = trigger.closest("[data-folding]");
+			if (!root) return;
+			const open = root.toggleAttribute("data-open");
+			trigger.setAttribute("aria-expanded", String(open));
+		});
+	})();
+</script>
+
+<style is:global>
+.mdx-folding {
+	--fd-panel-duration: 320ms;
+	--fd-content-duration: 360ms;
+	--fd-fade-in: 220ms;
+	--fd-fade-out: 140ms;
+	--fd-ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+	--fd-ease-spring: cubic-bezier(0.34, 1.2, 0.64, 1);
+	--fd-content-lift: -0.25rem;
+	--fd-content-blur: 1.5px;
+	position: relative;
+	isolation: isolate;
+	margin: 1rem 0;
+}
+
+/* 与 Accordion 共用撕纸纸面；内边距、字号和动效幅度都更轻 */
+.mdx-folding::before {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background: var(--card-surface);
+	pointer-events: none;
+	content: "";
+	filter: var(--paper-deckle-filter);
+}
+
+.mdx-folding__summary {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 0.75rem 1rem;
+	border: 0;
+	background: transparent;
+	color: var(--deep-text);
+	font: inherit;
+	font-size: 0.9rem;
+	font-weight: 600;
+	line-height: 1.35;
+	cursor: pointer;
+}
+
+.mdx-folding__summary:focus-visible {
+	outline: 2px solid var(--article-title-marker);
+	outline-offset: -2px;
+}
+
+.mdx-folding__chevron {
+	display: flex;
+	justify-self: start;
+	flex: 0 0 auto;
+	color: var(--content-meta);
+	rotate: -90deg;
+	transition: rotate 300ms var(--fd-ease-spring);
+}
+
+.mdx-folding__chevron svg {
+	width: 1.15rem;
+	height: 1.15rem;
+}
+
+.mdx-folding[data-open] .mdx-folding__chevron {
+	rotate: 0deg;
+}
+
+.mdx-folding__title {
+	text-align: center;
+}
+
+.mdx-folding__action {
+	justify-self: end;
+	color: var(--content-meta);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.mdx-folding__action-collapse {
+	display: none;
+}
+
+.mdx-folding[data-open] .mdx-folding__action-expand {
+	display: none;
+}
+
+.mdx-folding[data-open] .mdx-folding__action-collapse {
+	display: inline;
+}
+
+/* 高度走不回弹的 settle，内容小幅上浮并收敛模糊 */
+.mdx-folding__panel {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--fd-panel-duration) var(--fd-ease-settle);
+}
+
+.mdx-folding[data-open] .mdx-folding__panel {
+	grid-template-rows: 1fr;
+}
+
+.mdx-folding__panel-inner {
+	min-height: 0;
+	overflow: hidden;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity var(--fd-fade-out) linear,
+		visibility 0s linear var(--fd-panel-duration);
+}
+
+.mdx-folding[data-open] .mdx-folding__panel-inner {
+	opacity: 1;
+	visibility: visible;
+	transition:
+		opacity var(--fd-fade-in) linear 60ms,
+		visibility 0s;
+}
+
+.mdx-folding__body {
+	padding: 0 1rem 0.875rem;
+	color: var(--deep-text);
+	font-size: 0.9rem;
+	line-height: 1.7;
+	translate: 0 var(--fd-content-lift);
+	filter: blur(var(--fd-content-blur));
+	transition:
+		translate 200ms var(--fd-ease-settle),
+		filter 200ms linear;
+}
+
+.mdx-folding[data-open] .mdx-folding__body {
+	translate: 0 0;
+	filter: none;
+	transition:
+		translate var(--fd-content-duration) var(--fd-ease-spring) 50ms,
+		filter var(--fd-panel-duration) linear;
+}
+
+.mdx-folding__body > :first-child {
+	margin-top: 0;
+}
+
+.mdx-folding__body > :last-child {
+	margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.mdx-folding__chevron,
+	.mdx-folding__panel,
+	.mdx-folding__panel-inner,
+	.mdx-folding__body {
+		transition-duration: 0s;
+		transition-delay: 0s;
+	}
+}
+</style>

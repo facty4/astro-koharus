@@ -1,0 +1,41 @@
+---
+import License from "@components/misc/License.astro";
+import { licenseConfig } from "@/config/licenseConfig";
+
+export interface Props {
+	title: string;
+	published: Date;
+	id: string;
+	author?: string;
+	sourceLink?: string;
+	licenseName?: string;
+	licenseUrl?: string;
+	/** 纯文本（llm-wiki）版地址，透传给许可卡的交互层 */
+	wikiMarkdownUrl?: string;
+}
+
+const {
+	title,
+	published,
+	id,
+	author,
+	sourceLink,
+	licenseName,
+	licenseUrl,
+	wikiMarkdownUrl,
+} = Astro.props;
+---
+
+{licenseConfig.enable && (
+  <License
+    title={title}
+    id={id}
+    pubDate={published}
+    author={author ?? ""}
+    sourceLink={sourceLink ?? ""}
+    licenseName={licenseName ?? ""}
+    licenseUrl={licenseUrl ?? ""}
+    wikiMarkdownUrl={wikiMarkdownUrl}
+    class="license-container onload-animation"
+  />
+)}

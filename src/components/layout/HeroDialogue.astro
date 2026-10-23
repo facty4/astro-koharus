@@ -1,0 +1,42 @@
+---
+/**
+ * 左下角的角色 + 想法气泡。必须渲染在第二层之后：外层 sticky 贴着视口底边，
+ * 正常流位置就在第二层底部，于是从首屏一路浮到第二层，再停在第二层左下角。
+ * 何时出现由 hero 滚动时间线控制，见 home-hero-controller.ts。
+ */
+import HeroSticker from "@components/layout/HeroSticker.astro";
+import { homeConfig } from "@/config";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+
+const { dialogue, sticker } = homeConfig.hero;
+const lines = dialogue?.enabled === false ? [] : (dialogue?.lines ?? []);
+---
+
+{
+	lines.length > 0 && (
+		<aside
+			class="home-hero__dialogue"
+			aria-label={i18n(I18nKey.characterDialogue)}
+			data-hero-dialogue
+			data-lines={JSON.stringify(lines)}
+			data-scene-visible="false"
+		>
+			<div class="home-hero__dialogue-anchor" data-dialogue-anchor>
+				<p
+					class="home-hero__dialogue-bubble"
+					data-dialogue-bubble
+					data-open="false"
+					aria-live="polite"
+				/>
+				<HeroSticker config={sticker} />
+				<button
+					type="button"
+					class="home-hero__dialogue-trigger"
+					aria-label={i18n(I18nKey.dialogueNext)}
+					title={i18n(I18nKey.dialogueNext)}
+				/>
+			</div>
+		</aside>
+	)
+}

@@ -1,0 +1,106 @@
+---
+import Icon from "@components/common/Icon.astro";
+import { homeConfig, licenseConfig, siteConfig } from "@/config";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import { formatDateToYYYYMMDD } from "@/utils/date-utils";
+import { url } from "@/utils/url-utils";
+
+interface Props {
+	title: string;
+	id: string;
+	pubDate: Date;
+	class: string;
+	author: string;
+	sourceLink: string;
+	licenseName: string;
+	licenseUrl: string;
+	/** 纯文本（llm-wiki）版地址；缺省不渲染入口 */
+	wikiMarkdownUrl?: string;
+}
+
+const {
+	title,
+	pubDate,
+	author,
+	sourceLink,
+	licenseName,
+	licenseUrl,
+	wikiMarkdownUrl,
+} = Astro.props;
+const className = Astro.props.class;
+const profileConf = homeConfig;
+const licenseConf = licenseConfig;
+const postUrl = sourceLink || decodeURIComponent(Astro.url.toString());
+const sponsorUrl = url("/sponsor/");
+const hasActions =
+	siteConfig.pages.sponsor || siteConfig.postShare || !!wikiMarkdownUrl;
+---
+
+<div class={`license-card ${className}`}>
+  <div class="license-card__body">
+    <span class="license-card__surface" aria-hidden="true"></span>
+    <div class="license-card__content">
+      <div class="license-card__title">{title}</div>
+      <a href={postUrl} class="license-card__url">{postUrl}</a>
+      <dl class="license-card__meta">
+        <div class="license-card__meta-item">
+          <dt>{i18n(I18nKey.author)}</dt>
+          <dd>{author || profileConf.name}</dd>
+        </div>
+        <div class="license-card__meta-item">
+          <dt>{i18n(I18nKey.publishedAt)}</dt>
+          <dd>{formatDateToYYYYMMDD(pubDate)}</dd>
+        </div>
+        <div class="license-card__meta-item">
+          <dt>{i18n(I18nKey.license)}</dt>
+          <dd>
+            <a
+              href={licenseName ? licenseUrl || undefined : licenseConf.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >{licenseName || licenseConf.name}</a>
+          </dd>
+        </div>
+      </dl>
+
+      <Icon
+        name="fa7-brands:creative-commons"
+        class="license-card__mark transition"
+        aria-hidden="true"
+      />
+    </div>
+  </div>
+
+  {hasActions && (
+    <div class="license-card__actions">
+      <span class="license-card__surface license-card__surface--actions" aria-hidden="true"></span>
+      <div class="license-card__action-row">
+        {siteConfig.pages.sponsor && (
+          <a href={sponsorUrl} class="license-card__action">
+            <Icon name="material-symbols:coffee-outline-rounded" class="license-card__action-icon" aria-hidden="true" />
+            <span>{i18n(I18nKey.sponsor)}</span>
+          </a>
+        )}
+        {siteConfig.postShare && (
+          <button type="button" class="license-card__action" data-post-share-native aria-label={i18n(I18nKey.shareArticle)}>
+            <Icon name="material-symbols:share" class="license-card__action-icon" aria-hidden="true" />
+            <span>{i18n(I18nKey.shareArticle)}</span>
+          </button>
+        )}
+        {wikiMarkdownUrl && (
+          <a
+            href={wikiMarkdownUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="license-card__action"
+            data-pagefind-ignore
+          >
+            <Icon name="material-symbols:description-outline-rounded" class="license-card__action-icon" aria-hidden="true" />
+            <span>{i18n(I18nKey.plainTextVersion)}</span>
+          </a>
+        )}
+      </div>
+    </div>
+  )}
+</div>

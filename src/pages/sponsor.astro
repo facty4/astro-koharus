@@ -1,0 +1,195 @@
+---
+import Icon from "@components/common/Icon.astro";
+import PageTitle from "@/components/common/PageTitle.astro";
+import { siteConfig, sponsorConfig } from "@/config";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import MainGridLayout from "@/layouts/MainGridLayout.astro";
+import { formatDateToYYYYMMDD } from "@/utils/date-utils";
+import { url } from "@/utils/url-utils";
+import "@/styles/pages/sponsor.css";
+
+// 检查页面是否启用
+if (!siteConfig.pages.sponsor) {
+	return Astro.redirect("/404/");
+}
+
+/** 打赏卡片进度拉满对应的金额（元），达到或超过即铺满整张卡片 */
+const SPONSOR_PROGRESS_FULL_AMOUNT = 50;
+
+const title = sponsorConfig.title || i18n(I18nKey.sponsorTitle);
+const description =
+	sponsorConfig.description || i18n(I18nKey.sponsorDescription);
+const enabledMethods = sponsorConfig.methods.filter((method) => method.enabled);
+const sponsors = sponsorConfig.sponsors || [];
+const showSponsorsList = sponsorConfig.showSponsorsList !== false;
+
+/** 从 "¥648"、"648 元" 这类文案里取出数值，取不到返回 undefined */
+function parseSponsorAmount(amount: string | undefined): number | undefined {
+	const normalized = amount?.replace(/[^\d.]/g, "");
+	if (!normalized) return undefined;
+	const parsed = Number(normalized);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function formatSponsorDate(date: string | undefined): string {
+	if (!date) return "";
+	const parsed = new Date(date);
+	return Number.isNaN(parsed.getTime()) ? date : formatDateToYYYYMMDD(parsed);
+}
+
+const sponsorCards = sponsors.map((sponsor) => {
+	const amount = parseSponsorAmount(sponsor.amount);
+	const ratio =
+		amount === undefined
+			? 0
+			: Math.min(amount / SPONSOR_PROGRESS_FULL_AMOUNT, 1);
+	const dateText = formatSponsorDate(sponsor.date);
+	const meta =
+		dateText && sponsor.method
+			? i18n(I18nKey.sponsorMetaTemplate)
+					.replace("{date}", dateText)
+					.replace("{method}", sponsor.method)
+			: dateText || sponsor.method || "";
+
+	return {
+		name: sponsor.name,
+		amount: sponsor.amount,
+		meta,
+		progress: Math.round(ratio * 100),
+		amountInFen: amount === undefined ? null : Math.round(amount * 100),
+	};
+});
+
+// 金额以「分」为单位累加，避免浮点误差
+const sponsorTotal = sponsorCards.reduce(
+	(total, card) => total + (card.amountInFen ?? 0),
+	0,
+);
+const hasSponsorAmount = sponsorCards.some((card) => card.amountInFen !== null);
+const formattedSponsorTotal = new Intl.NumberFormat("zh-CN", {
+	style: "currency",
+	currency: "CNY",
+	currencyDisplay: "narrowSymbol",
+}).format(sponsorTotal / 100);
+---
+
+<MainGridLayout title={title} description={description} hasOwnH1={true}>
+  <div class="flex w-full rounded-(--radius-large) overflow-hidden relative">
+    <div class="card-base z-10 px-9 py-6 relative w-full">
+      <!-- 页面标题和描述 -->
+      <div class="mb-8">
+        <PageTitle
+          title={title}
+          eyebrow="Sponsor"
+          description={i18n(I18nKey.sponsorMotto)}
+          variant="stacked"
+        />
+        {sponsorConfig.usage && (
+          <div class="mb-8 p-4 rounded-lg bg-(--primary)/8 dark:bg-(--btn-regular-bg) border border-(--primary)/30 dark:border-none backdrop-blur-xs shadow-xs usage-info-box">
+            <div class="flex items-start gap-2">
+              <Icon name="material-symbols:info-outline" class="text-(--primary) text-lg shrink-0 mt-0.5" />
+              <p class="text-sm text-neutral-700 dark:text-neutral-200 leading-relaxed">
+                <span class="font-semibold text-(--primary)"></span>
+                {sponsorConfig.usage}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <!-- 收款码：一行三个，模糊遮罩 + 居中支付图标，悬停揭示完整二维码 -->
+      {enabledMethods.length > 0 && (
+        <div class="sponsor-qr-grid">
+          {enabledMethods.map((method) => (
+            <figure
+              class:list={[
+                "sponsor-qr-card",
+                { "sponsor-qr-card--empty": !method.qrCode }
+              ]}
+              data-sponsor-qr-card={method.qrCode ? "" : undefined}
+              tabindex={method.qrCode ? 0 : undefined}
+            >
+              <div class="sponsor-qr-card__frame">
+                {method.qrCode ? (
+                  <img
+                    src={url(method.qrCode)}
+                    alt={`${method.name} ${i18n(I18nKey.scanToSponsor)}`}
+                    class="sponsor-qr-card__image"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span class="sponsor-qr-card__empty-text">{i18n(I18nKey.sponsorNotAvailable)}</span>
+                )}
+                {method.icon && (
+                  <span class="sponsor-qr-card__icon">
+                    <Icon name={method.icon} class="sponsor-qr-card__glyph" />
+                  </span>
+                )}
+              </div>
+              <figcaption class="sr-only">{method.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+
+  <!-- 打赏列表 -->
+  {showSponsorsList && (
+    <div class="flex w-full rounded-(--radius-large) overflow-hidden relative mt-4">
+      <div class="card-base z-10 px-9 py-6 relative w-full">
+        <div class="flex items-center mb-6">
+          <div class="sponsor-list__heading">
+            <h2 class="text-xl font-bold text-neutral-900 dark:text-neutral-100">
+              {i18n(I18nKey.sponsorList)}
+            </h2>
+            {hasSponsorAmount && (
+              <span class="sponsor-list__total">
+                {i18n(I18nKey.sponsorTotal)} {formattedSponsorTotal}
+              </span>
+            )}
+          </div>
+        </div>
+        {sponsorCards.length > 0 ? (
+          <div class="sponsor-list">
+            {sponsorCards.map((sponsor) => (
+              <div
+                class="sponsor-card"
+                style={`--sponsor-progress: ${sponsor.progress}%`}
+              >
+                <span class="sponsor-card__name">{sponsor.name}</span>
+                {sponsor.meta && (
+                  <span class="sponsor-card__meta">{sponsor.meta}</span>
+                )}
+                {sponsor.amount && (
+                  <span class="sponsor-card__amount">{sponsor.amount}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div class="text-center py-12 text-neutral-500 dark:text-neutral-500">
+            <p>{i18n(I18nKey.sponsorEmpty)}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  <!-- 样式已迁移至 src/styles/pages/sponsor.css -->
+
+  <script>
+    import { definePageIsland } from "@/utils/swup-lifecycle";
+    import {
+      mountSponsorQrReveal,
+      unmountSponsorQrReveal,
+    } from "@/utils/sponsor-qr-controller";
+
+    definePageIsland({
+      name: "sponsor-qr-reveal",
+      mount: mountSponsorQrReveal,
+      unmount: unmountSponsorQrReveal,
+    });
+  </script>
+</MainGridLayout>

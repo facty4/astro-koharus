@@ -1,0 +1,216 @@
+---
+import ArticleCard from "@/components/pages/article-list/ArticleCard.astro";
+import ArticlePagination from "@/components/pages/article-list/ArticlePagination.astro";
+import PinnedArticleList from "@/components/pages/article-list/PinnedArticleList.astro";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import type {
+	ArticleListPost,
+	UmamiPageviewConfig,
+} from "@/types/article-list";
+
+interface Props {
+	pinnedPosts: ArticleListPost[];
+	regularPosts: ArticleListPost[];
+	totalPosts: number;
+	currentPage: number;
+	totalPages: number;
+	umamiPageviews?: UmamiPageviewConfig;
+	fallbackImageUrl: string;
+	showCoverLoading?: boolean;
+}
+
+const {
+	pinnedPosts,
+	regularPosts,
+	totalPosts,
+	currentPage,
+	totalPages,
+	umamiPageviews,
+	fallbackImageUrl,
+	showCoverLoading = false,
+} = Astro.props;
+const totalPostLabel = i18n(
+	totalPosts === 1 ? I18nKey.postCount : I18nKey.postsCount,
+);
+---
+
+<div
+	class="article-list"
+	data-article-list
+	data-article-list-umami-enabled={umamiPageviews?.enabled ? "true" : "false"}
+	data-article-list-umami-api-base={umamiPageviews?.apiBase || ""}
+	data-article-list-umami-share-id={umamiPageviews?.shareId || ""}
+>
+	<PinnedArticleList
+		posts={pinnedPosts}
+		fallbackImageUrl={fallbackImageUrl}
+		showCoverLoading={showCoverLoading}
+	/>
+
+	<header class="article-list-toolbar">
+		<div class="article-list-toolbar__summary">
+			<h2 id="article-list-regular-title" class="article-list-section-title">
+				{i18n(I18nKey.articles)}
+			</h2>
+			<div
+				class="article-list-toolbar__total"
+				aria-label={`${i18n(I18nKey.totalPostsPrefix)} ${totalPosts} ${totalPostLabel}`}
+			>
+				<span>{i18n(I18nKey.totalPostsPrefix)}</span>
+				<strong>{totalPosts}</strong>
+				<span>{totalPostLabel}</span>
+			</div>
+		</div>
+	</header>
+
+	<section class="article-list-regular" aria-labelledby="article-list-regular-title">
+		{regularPosts.length > 0 ? (
+			<div class="article-list-card-grid" data-article-list-card-grid>
+				<span class="article-list-highlight" data-article-list-highlight aria-hidden="true" />
+				{regularPosts.map((post) => (
+					<ArticleCard
+						post={post}
+						fallbackImageUrl={fallbackImageUrl}
+						showCoverLoading={showCoverLoading}
+					/>
+				))}
+			</div>
+		) : (
+			<div class="article-list-empty">
+				<span class="article-list-empty__title">{i18n(I18nKey.noRegularPosts)}</span>
+				<span class="article-list-empty__meta">{i18n(I18nKey.noPostsHint)}</span>
+			</div>
+		)}
+	</section>
+
+	<ArticlePagination currentPage={currentPage} totalPages={totalPages} />
+</div>
+
+<script>
+	import {
+		createArticleCoverLifecycle,
+		parseArticleCoverApiUrls,
+		type ArticleCoverLifecycle,
+	} from "@/utils/article-cover-lifecycle";
+	import { createArticleListHighlight } from "@/utils/article-list-highlight-controller";
+	import { createPinnedCarousel } from "@/utils/pinned-carousel-controller";
+	import {
+		createEmptyUmamiPageviewLookup,
+		getUmamiPageviewLookup,
+		normalizeUmamiPageviewPath,
+	} from "@/utils/umami-pageviews";
+	import { definePageIsland } from "@/utils/swup-lifecycle";
+
+	let cleanupActiveArticleList: (() => void) | undefined;
+
+	function initArticleList() {
+		cleanupActiveArticleList?.();
+		cleanupActiveArticleList = undefined;
+
+		const articleListRoot = document.querySelector<HTMLElement>(
+			"[data-article-list]",
+		);
+		if (!articleListRoot) return;
+		const articleList = articleListRoot;
+
+		const coverHosts = Array.from(
+			articleList.querySelectorAll<HTMLElement>(
+				"[data-article-list-cover-wrap]",
+			),
+		);
+		const pinnedList = articleList.querySelector<HTMLElement>(
+			"[data-article-list-pinned]",
+		);
+		const cardGrid = articleList.querySelector<HTMLElement>(
+			"[data-article-list-card-grid]",
+		);
+		const controller = new AbortController();
+		const { signal } = controller;
+		let disposed = false;
+		let pageviewLookup: Map<string, number> | null = null;
+		const coverLifecycles = new Map<HTMLElement, ArticleCoverLifecycle>();
+
+		function renderPageviews() {
+			articleList
+				.querySelectorAll<HTMLElement>("[data-article-list-pageview]")
+				.forEach((node) => {
+					if (pageviewLookup === null) {
+						node.textContent = "-";
+						return;
+					}
+					const path = normalizeUmamiPageviewPath(
+						node.dataset.articleListPageviewPath || "",
+					);
+					node.textContent = (pageviewLookup.get(path) || 0).toLocaleString();
+				});
+		}
+
+		function initCoverLoading() {
+			coverHosts.forEach((wrap) => {
+				const image = wrap.querySelector<HTMLImageElement>("[data-cover-image]");
+				if (!image) return;
+
+				const lifecycle = createArticleCoverLifecycle({
+					host: wrap,
+					image,
+					apiUrls: parseArticleCoverApiUrls(image.dataset.apiUrls),
+					fallbackSrc: image.dataset.fallbackSrc,
+					baseUrl: window.location.href,
+					signal,
+				});
+				coverLifecycles.set(wrap, lifecycle);
+				const pinnedItem = wrap.closest<HTMLElement>(
+					"[data-article-list-pinned-item]",
+				);
+				lifecycle.setVisible(!pinnedItem?.hidden);
+			});
+		}
+
+		// 封面生命周期必须先建好：轮播挂载时要按当前活动卡同步封面的加载与揭示
+		initCoverLoading();
+		const cleanupPinnedCarousel = pinnedList
+			? createPinnedCarousel({ section: pinnedList, coverLifecycles, signal })
+			: () => {};
+		if (cardGrid) createArticleListHighlight({ grid: cardGrid, signal });
+		renderPageviews();
+
+		const canLoadPageviews =
+			articleList.dataset.articleListUmamiEnabled === "true" &&
+			!!articleList.dataset.articleListUmamiApiBase &&
+			!!articleList.dataset.articleListUmamiShareId;
+		if (canLoadPageviews) {
+			void getUmamiPageviewLookup({
+				apiBase: articleList.dataset.articleListUmamiApiBase || "",
+				shareId: articleList.dataset.articleListUmamiShareId || "",
+			})
+				.then((lookup) => {
+					if (disposed) return;
+					pageviewLookup = lookup;
+					renderPageviews();
+				})
+				.catch(() => {
+					if (disposed) return;
+					pageviewLookup = createEmptyUmamiPageviewLookup();
+					renderPageviews();
+				});
+		}
+
+		cleanupActiveArticleList = () => {
+			disposed = true;
+			cleanupPinnedCarousel();
+			controller.abort();
+		};
+	}
+
+	// 列表随容器一起被替换：容器替换前先拆掉封面生命周期与 AbortController，
+	// 原先只在下一次 initArticleList() 开头补拆，中间那段时间它们还挂在旧 DOM 上
+	definePageIsland({
+		name: "article-list",
+		mount: initArticleList,
+		unmount: () => {
+			cleanupActiveArticleList?.();
+			cleanupActiveArticleList = undefined;
+		},
+	});
+</script>

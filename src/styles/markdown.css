@@ -1,0 +1,483 @@
+@reference "tailwindcss";
+
+/* 文章详情整列加宽到 55rem（880px），与评论对话框（wl-panel）同宽；
+   #post-container 用 calc 补回自身 px-3 内边距。
+   这些类仅文章详情使用，about 等页面不受影响。
+   用 width 而非 max-width：组件上的 max-w-none!（@layer utilities 内的 !important）
+   按 cascade 规则会压过未分层的 !important 声明，但拦不住普通 width。 */
+.post-hero,
+.post-accordion,
+#post-cover,
+#post-container,
+.post-pager-row {
+  width: min(55rem, 100%);
+  margin-inline: auto;
+}
+
+#post-container {
+  width: min(calc(55rem + 1.5rem), 100%);
+}
+
+/* 文章正文使用柔和青瓷；站点其他区域的青色强调沿用原色 */
+#post-container .custom-md {
+  --link-color: #23786f;
+  --article-title-marker: #23786f;
+}
+
+:root.dark #post-container .custom-md {
+  --link-color: #7fcfc4;
+  --article-title-marker: #7fcfc4;
+}
+
+.custom-md {
+  overflow-wrap: break-word;
+
+  /* 斜体波浪线（紫色） */
+  --md-italic-wavy: oklch(0.6 0.15 285);
+
+  body.sticky-navbar & {
+    [id] {
+      scroll-margin-top: 5.5rem;
+    }
+  }
+
+  /* 一至六级标题跟随 prose 默认样式，仅二、三级标题下方加一条手绘短线 */
+
+  :root.dark & {
+    --md-italic-wavy: oklch(0.75 0.12 285);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    .anchor {
+      @apply transition! -m-0.5! ml-[0.2ch]! p-0.5! select-none! opacity-0! no-underline!;
+
+      .anchor-icon {
+        @apply mx-[0.45ch]!;
+      }
+    }
+
+    &:hover {
+      .anchor {
+        @apply opacity-100!;
+      }
+    }
+  }
+
+  /* 背景色 + SVG mask 画手绘短线，比 border 更接近笔触；
+     使用主题标记色，宽度随字号缩放，间距贴着标题 */
+  h2::after,
+  h3::after {
+    content: "";
+    display: block;
+    width: 2.2em;
+    max-width: 56%;
+    height: 7px;
+    margin-top: 0;
+    background-color: var(--article-title-marker);
+    opacity: 0.8;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M1 4.5 C 10 2.5 16 5 24 3.6 C 32 2.2 40 5.2 47 3.4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M1 4.5 C 10 2.5 16 5 24 3.6 C 32 2.2 40 5.2 47 3.4'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+
+  /* 下划线用 border 画而不是 text-decoration：浏览器不支持自定义虚线节奏，
+     这里要的是比默认更粗、更松的短划；标题锚点 .anchor 不参与本规则 */
+  a:not(.no-styling):not(.anchor) {
+    @apply relative bg-none font-medium text-(--tw-prose-links);
+    /* prose 默认给链接加实线下划线，这里让位给 border 画的虚线 */
+    text-decoration-line: none;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    word-break: break-word;
+    border-bottom: 2px solid transparent;
+    border-image: repeating-linear-gradient(
+        to right,
+        var(--content-meta) 0 6px,
+        transparent 6px 11px
+      )
+      1;
+
+    &:hover,
+    &:active {
+      @apply text-(--link-color);
+      border-image: repeating-linear-gradient(
+          to right,
+          var(--link-color) 0 6px,
+          transparent 6px 11px
+        )
+        1;
+    }
+  }
+
+  /* 外链正文由插件包进 .external-link__label：虚线只画文字，
+     favicon 和右侧跳转纸飞机不再带下划线。 */
+  a.external-link:not(.no-styling):not(.anchor) {
+    border-bottom: 0;
+    border-image: none;
+  }
+
+  a.external-link:not(.no-styling):not(.anchor) > .external-link__label {
+    border-bottom: 2px solid transparent;
+    border-image: repeating-linear-gradient(
+        to right,
+        var(--content-meta) 0 6px,
+        transparent 6px 11px
+      )
+      1;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  a.external-link:not(.no-styling):not(.anchor):hover
+    > .external-link__label,
+  a.external-link:not(.no-styling):not(.anchor):active
+    > .external-link__label {
+    border-image: repeating-linear-gradient(
+        to right,
+        var(--link-color) 0 6px,
+        transparent 6px 11px
+      )
+      1;
+  }
+
+  /* 标题锚点 #：跟随主题强调色，不带下划线与底色 */
+  .anchor {
+    @apply text-(--link-color);
+    text-decoration-line: none;
+  }
+
+  /* 外链：左侧 favicon 与右侧纸飞机箭头（线框 / 实心两版，悬停切换）由 rehype-external-links 插入 */
+  .external-link__favicon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin: 0 0.25em 0 0;
+    vertical-align: -0.125em;
+    cursor: inherit;
+  }
+
+  .external-navigation-icon {
+    display: inline-flex;
+    width: 0.95em;
+    height: 0.95em;
+    margin-left: 0.18em;
+    vertical-align: -0.12em;
+    transition: color 0.15s;
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      /* 目录纸飞机默认朝正上，链接场景里朝右上更贴合「跳转」语义 */
+      transform: rotate(45deg);
+    }
+
+    .external-navigation-icon__fill {
+      display: none;
+    }
+  }
+
+  a:hover > .external-navigation-icon .external-navigation-icon__line,
+  a:focus-visible > .external-navigation-icon .external-navigation-icon__line {
+    display: none;
+  }
+
+  a:hover > .external-navigation-icon .external-navigation-icon__fill,
+  a:focus-visible > .external-navigation-icon .external-navigation-icon__fill {
+    display: block;
+  }
+
+  /* 加粗：正文色 + 细手绘波浪线，线条使用主题标记色 */
+  strong,
+  b {
+    @apply font-bold;
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+    text-decoration-color: var(--article-title-marker);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+  }
+
+  /* 斜体：保留倾斜 + 紫色波浪下划线 */
+  em,
+  i {
+    text-decoration: underline wavy;
+    text-decoration-color: var(--md-italic-wavy);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 4px;
+  }
+
+  /* 行内代码：底色与描边对齐导航下拉卡片（--card-border + deep-text 8% 淡底），不做悬停反馈 */
+  code {
+    @apply text-(--inline-code-color) px-1.5 py-0.5 rounded-lg overflow-hidden;
+    background-color: color-mix(in oklch, var(--deep-text) 8%, transparent);
+    border: 1px solid var(--card-border);
+
+    font-family:
+      "JetBrains Mono Variable",
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      Liberation Mono,
+      Courier New,
+      monospace;
+
+    &:before {
+      content: none;
+    }
+
+    &:after {
+      content: none;
+    }
+
+    counter-reset: line;
+
+    span.line {
+      &:before {
+        @apply text-white/25 mr-4 w-4 inline-block;
+        content: counter(line);
+        counter-increment: line;
+        direction: rtl;
+      }
+
+      &:last-child:empty,
+      &:last-child:has(> span:empty:only-child) {
+        display: none;
+      }
+    }
+  }
+
+  .expressive-code {
+    @apply my-4;
+  }
+
+  pre:not(.expressive-code *) {
+    @apply my-4 overflow-x-auto p-4;
+    background: var(--codeblock-bg) !important;
+    border: 1px solid var(--codeblock-border) !important;
+    border-radius: var(--radius-large);
+  }
+
+  pre:not(.expressive-code *) > code {
+    display: block;
+    min-width: max-content;
+    padding: 0;
+    overflow: visible;
+    color: var(--inline-code-color);
+    background: transparent !important;
+    border-radius: 0;
+  }
+
+  ul,
+  ol {
+    li::marker {
+      @apply text-(--primary);
+    }
+  }
+
+  /* 引文：不用左侧色条，改由一枚悬在正文之外的大号衬线引号承担标记。
+     isolation + z-index 把引号压在文字之下、卡片背景之上；
+     mask 让引号下缘淡出，避免与首行文字硬碰成一团 */
+  blockquote {
+    @apply not-italic relative isolate;
+    margin: 1.6em 0;
+    padding: 0.4em 1.2em 0.4em 1.6em;
+    border: 0;
+    background: transparent;
+    font-size: 1.14em;
+    font-weight: inherit;
+    line-height: 1.7;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+
+    &:before {
+      content: '\201C';
+      position: absolute;
+      top: -0.25em;
+      left: 0;
+      z-index: -1;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 3.2em;
+      line-height: 1;
+      color: var(--article-title-marker);
+      opacity: 0.55;
+      mask-image: linear-gradient(white, transparent);
+      transition: transform 0.25s, opacity 0.25s;
+    }
+
+    &:hover:before {
+      transform: translateY(-4px) scale(1.18);
+      opacity: 0.85;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &:before,
+      &:hover:before {
+        transition: none;
+        transform: none;
+      }
+    }
+
+    /* Remove the double quotes from default styles */
+    p:before,
+    p:after {
+      @apply content-none;
+    }
+  }
+
+  .katex-display-container {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 1em 0;
+  }
+
+  .horizontal-scroll-container {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .image-grid {
+    @apply items-stretch;
+    
+    center {
+      @apply h-full w-full;
+      
+      figure {
+        @apply flex flex-col h-full w-full m-0 p-0;
+        
+        img {
+          @apply object-cover w-full grow rounded-xl m-0;
+          /* 使图片自动填满所在网格高度（自适应裁剪居中，不拉伸变形） */
+          height: 100%;
+        }
+        
+        figcaption {
+          @apply mt-2 mb-0;
+        }
+      }
+    }
+  }
+}
+
+
+.custom-md {
+  table {
+    @apply my-4;
+    min-width: 100%;
+    width: max-content;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: calc(var(--radius-large) - 0.5rem);
+    overflow: hidden;
+  }
+
+  .horizontal-scroll-container {
+    @apply my-4;
+    border-radius: calc(var(--radius-large) - 0.5rem);
+  }
+
+  .horizontal-scroll-container > table {
+    @apply my-0;
+  }
+
+  th,
+  td {
+    @apply px-3 py-2 text-left;
+    min-width: 120px;
+    border: none;
+    word-break: break-word;
+  }
+
+  th {
+    @apply bg-(--btn-regular-bg) font-semibold text-(--btn-content) border-b border-(--line-color);
+  }
+
+  td {
+    @apply bg-(--card-bg);
+  }
+
+  /* 不画竖线：表头下方由 th 的底边分隔，正文行之间只留一条横线。 */
+  tbody tr + tr td {
+    border-top: 1px solid var(--line-divider);
+  }
+
+  /* 斑马纹收成极浅的一层，避免相邻行出现明显的灰阶断层。 */
+  tbody tr:nth-child(even) td {
+    background: color-mix(in oklab, var(--deep-text) 3%, transparent);
+  }
+}
+
+/* Markdown 内容黑白边框样式 */
+.markdown-bordered {
+  padding: 0;
+  margin: 1rem 0;
+}
+
+/* 移动端优化: 添加内边距 */
+@media (max-width: 768px) {
+  .markdown-bordered {
+    padding: 1rem;
+  }
+}
+
+/* Callout 提示框（[!NOTE] 等引用块）：统一成圆角淡底，去掉主题自带的左侧色条。
+   标题色往正文色压一档，避免整块高饱和。注意容器是 <div class="callout">，不是 blockquote */
+.custom-md .callout {
+  border-left: none;
+  /* 与行内代码 chip 同档圆角；原 calc(--radius-large - 0.5rem) 只有 4px，看不出圆角 */
+  border-radius: var(--radius-medium);
+  padding: 0.75rem 1rem;
+  background: color-mix(in oklab, var(--rc-color-light, var(--rc-color-default, #888)) 8%, transparent);
+}
+
+.custom-md .callout .callout-title {
+  color: color-mix(
+    in oklab,
+    var(--rc-color-light, var(--rc-color-default, #888)) 70%,
+    var(--deep-text)
+  );
+}
+
+:root.dark .custom-md .callout {
+  background: color-mix(in oklab, var(--rc-color-dark, var(--rc-color-default, #888)) 13%, transparent);
+}
+
+:root.dark .custom-md .callout .callout-title {
+  color: color-mix(
+    in oklab,
+    var(--rc-color-dark, var(--rc-color-default, #888)) 60%,
+    var(--deep-text)
+  );
+}
+
+/* 文章详情页正文图片自适应尺寸限制 */
+.custom-md p > img,
+.custom-md > img {
+  max-width: 100% !important;
+  max-height: 520px !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+  margin: 1.5rem auto !important;
+  border-radius: var(--radius-large, 0.75rem);
+}

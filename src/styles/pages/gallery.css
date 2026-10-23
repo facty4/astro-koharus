@@ -1,0 +1,267 @@
+/* 相册详情与相册卡片 */
+#swup-container:has([data-gallery-page]) {
+	min-height: 100dvh;
+}
+
+#main-grid-wrapper:has([data-gallery-detail]) .site-footer {
+	position: relative;
+	z-index: 1;
+}
+
+.gallery-tabs-wrapper {
+	display: flex;
+	margin-bottom: 1.5rem;
+}
+
+.gallery-tabs-pill {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	gap: 0.25rem;
+	padding: 0.25rem;
+	border: 0;
+	border-radius: 9999px;
+	background: var(--btn-plain-bg-hover);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.gallery-tabs-pill::-webkit-scrollbar {
+	display: none;
+}
+
+.gallery-tabs-indicator {
+	position: absolute;
+	z-index: 0;
+	border-radius: 9999px;
+	background: var(--page-bg);
+	box-shadow: 0 1px 0.25rem color-mix(in oklab, var(--deep-text) 6%, transparent);
+	opacity: 0;
+	pointer-events: none;
+	transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+		top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+		width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+		height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gallery-tab-btn {
+	position: relative;
+	z-index: 1;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	flex-shrink: 0;
+	min-height: 1.75rem;
+	padding: 0 0.5rem;
+	border: 0;
+	border-radius: 9999px;
+	background: transparent;
+	color: var(--content-meta);
+	font-size: 0.75rem;
+	font-weight: 500;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color 0.18s ease;
+}
+
+.gallery-tab-btn > svg {
+	flex-shrink: 0;
+}
+
+.gallery-tab-btn--active,
+.gallery-tab-btn--inactive:hover,
+.gallery-tab-btn--inactive:focus-visible {
+	color: var(--deep-text);
+}
+
+.gallery-tab-btn--active {
+	cursor: default;
+}
+
+.gallery-tab-btn:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+	.gallery-tabs-pill {
+		width: 100%;
+	}
+}
+
+@media (min-width: 640px) {
+	.gallery-masonry {
+		column-width: var(--col-width, 240px) !important;
+		column-count: auto !important;
+	}
+}
+
+/* --- AlbumCard.astro --- */
+/* 卡片以页面底色为基准抬升，亮/暗两档都靠同一组派生变量拉开层次。 */
+.album-card {
+	--album-surface: color-mix(in oklab, var(--deep-text) 8%, var(--page-bg));
+	--album-line: color-mix(in oklab, var(--deep-text) 20%, transparent);
+	--album-shadow: color-mix(in oklab, var(--deep-text) 16%, transparent);
+	position: relative;
+	display: block;
+	overflow: visible;
+	width: 100%;
+	height: 254px;
+	background: var(--album-surface);
+	border: 1px solid var(--album-line);
+	border-radius: 4px;
+	box-shadow: 0 2px 10px var(--album-shadow);
+	transition: 0.3s;
+	text-decoration: none;
+}
+
+.album-card.hidden {
+	display: none;
+}
+
+.album-card::before,
+.album-card::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 4px;
+	background: var(--album-surface);
+	border: 1px solid var(--album-line);
+	transition: 0.5s;
+	z-index: -1;
+}
+
+.album-card:hover::before {
+	transform: rotate(20deg);
+}
+
+.album-card:hover::after {
+	transform: rotate(10deg);
+	box-shadow: 0 2px 20px var(--album-shadow);
+}
+
+.album-card-imgbox {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	bottom: 10px;
+	right: 10px;
+	background: color-mix(in oklab, var(--deep-text) 16%, var(--page-bg));
+	transition: bottom 0.5s;
+	z-index: 1;
+	overflow: hidden;
+}
+
+.album-card:hover .album-card-imgbox {
+	bottom: 80px;
+}
+
+.album-card-img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	pointer-events: none;
+	transition: transform 0.5s;
+}
+
+.album-card:hover .album-card-img {
+	transform: scale(1.05);
+}
+
+.album-card-badge {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	padding: 4px 10px;
+	border-radius: 9999px;
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(4px);
+	z-index: 2;
+	transition: opacity 0.3s;
+}
+
+.album-card:hover .album-card-badge {
+	opacity: 0;
+}
+
+.album-card-tags-overlay {
+	position: absolute;
+	bottom: 8px;
+	left: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	z-index: 2;
+	transition: opacity 0.3s;
+}
+
+.album-card:hover .album-card-tags-overlay {
+	opacity: 0;
+}
+
+.album-card-tag-overlay {
+	font-size: 0.65rem;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(4px);
+	color: #fff;
+	white-space: nowrap;
+}
+
+.album-card-details {
+	position: absolute;
+	left: -10px;
+	right: 0;
+	bottom: 5px;
+	height: 60px;
+	text-align: center;
+	text-transform: uppercase;
+	z-index: 0;
+}
+
+.album-card-title {
+	font-weight: 600;
+	font-size: 1.25rem;
+	color: var(--deep-text);
+	line-height: 1.2;
+	margin: 0;
+}
+
+.album-card-meta {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	font-size: 0.875rem;
+	color: var(--content-meta);
+	margin-top: 4px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	padding: 0 10px;
+}
+
+.album-card-meta > span {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	max-width: 100%;
+}
+
+.album-card-location {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.125rem;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	max-width: 100%;
+}

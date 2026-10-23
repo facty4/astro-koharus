@@ -1,0 +1,160 @@
+---
+import HeroContact from "@components/layout/HeroContact.astro";
+import HeroMosaic from "@components/layout/HeroMosaic.astro";
+import HomeGuideFrame from "@components/layout/HomeGuideFrame.astro";
+import { homeConfig } from "@/config";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import { createHeroPuzzleLayout } from "@/utils/home-hero-motion";
+
+const { hero } = homeConfig;
+const puzzle = createHeroPuzzleLayout();
+const runtimeConfig = {
+	mosaic: hero.mosaic,
+	rain: {
+		enabled: hero.rain?.enabled ?? true,
+		intensity: hero.rain?.intensity ?? 0.6,
+		color: hero.rain?.color ?? "",
+	},
+};
+
+// 照片左移后腾出的右侧列放介绍票签：方向 / 爱好 / bio 各一张
+const intro = hero.photo.intro;
+const introCards = intro
+	? [intro.direction, intro.hobby, intro.bio].filter((text) => text.length > 0)
+	: [];
+---
+
+<section
+	class="home-hero"
+	id="home-hero"
+	data-home-hero
+	data-hero-config={JSON.stringify(runtimeConfig)}
+>
+	<svg
+		class="home-hero__puzzle"
+		viewBox={puzzle.viewBox}
+		preserveAspectRatio="xMidYMid slice"
+		aria-hidden="true"
+	>
+		<rect
+			class="home-hero__puzzle-bg"
+			width={puzzle.width}
+			height={puzzle.height}
+		/>
+		{
+			puzzle.seams.map((d) => (
+				<path
+					class="home-hero__puzzle-seam"
+					d={d}
+					vector-effect="non-scaling-stroke"
+				/>
+			))
+		}
+	</svg>
+
+	<div class="home-hero__backdrop" aria-hidden="true"></div>
+
+	<HomeGuideFrame />
+
+	<HeroMosaic
+		desktopImage={hero.photo.main.image}
+		mobileImage={hero.photo.main.image}
+		config={hero.mosaic}
+		mainAuthor={hero.photo.main.author ?? ""}
+		overlay={hero.photo.overlay}
+	/>
+
+	<header class="home-hero__identity" data-hero-title>
+		<svg class="home-hero__filter" aria-hidden="true" focusable="false">
+			<defs>
+				<filter
+					id="home-hero-gooey"
+					x="-20%"
+					y="-30%"
+					width="140%"
+					height="160%"
+					color-interpolation-filters="sRGB"
+				>
+					<feMorphology operator="dilate" radius="0.8" in="SourceGraphic" result="dilate" />
+					<feGaussianBlur in="dilate" stdDeviation="2.2" result="blur" />
+					<feColorMatrix
+						in="blur"
+						type="matrix"
+						values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9"
+						result="goo"
+					/>
+					<feComposite in="SourceGraphic" in2="goo" operator="atop" />
+				</filter>
+			</defs>
+		</svg>
+		<h1 class="home-hero__title">
+			<span class="home-hero__wordmark" data-hero-wordmark>
+				<span class="home-hero__wordmark-text">{homeConfig.displayName || homeConfig.name}</span>
+				<canvas class="home-hero__wordmark-canvas" aria-hidden="true"></canvas>
+			</span>
+			<span class="sr-only">{i18n(I18nKey.techBlogSuffix)}</span>
+		</h1>
+		{homeConfig.occupation && (
+			<p class="home-hero__occupation">{homeConfig.occupation}</p>
+		)}
+	</header>
+
+	{hero.contact && <HeroContact contact={hero.contact} />}
+
+	{
+		introCards.length > 0 && (
+			<div class="home-hero__intro" data-hero-intro>
+				<!-- 序号大字的裁切形状：内框纸面路径按 640×112 归一化，三张票签共用 -->
+				<svg class="home-hero__intro-defs" aria-hidden="true" focusable="false">
+					<defs>
+						<clipPath id="home-hero-intro-paper" clipPathUnits="objectBoundingBox">
+							<path d="M0.0516 0.0893H0.9484Q0.9547 0.2589 0.9844 0.2857V0.7143Q0.9547 0.7411 0.9484 0.9107H0.0516Q0.0453 0.7411 0.0156 0.7143V0.2857Q0.0453 0.2589 0.0516 0.0893Z" />
+						</clipPath>
+					</defs>
+				</svg>
+				{introCards.map((text, index) => (
+					<div class="home-hero__intro-card">
+						<svg
+							class="home-hero__intro-frame"
+							viewBox="0 0 640 112"
+							preserveAspectRatio="none"
+							aria-hidden="true"
+							focusable="false"
+						>
+							<path class="home-hero__intro-outline" d="M26 3H614Q614 25 637 25V87Q614 87 614 109H26Q26 87 3 87V25Q26 25 26 3Z" />
+							<path class="home-hero__intro-paper" d="M33 10H607Q611 29 630 32V80Q611 83 607 102H33Q29 83 10 80V32Q29 29 33 10Z" />
+						</svg>
+						<span class="home-hero__intro-index" aria-hidden="true">
+							{["壹", "贰", "叁"][index]}
+						</span>
+						<p class="home-hero__intro-text">{text}</p>
+					</div>
+				))}
+			</div>
+		)
+	}
+
+	<canvas class="home-hero__rain" data-hero-rain aria-hidden="true"></canvas>
+</section>
+
+<script>
+	import { mountHomeHero } from "@/utils/home-hero-controller";
+	import { bindHomeLayer } from "@/utils/home-lifecycle";
+
+	let cleanupHomeHero: (() => void) | null = null;
+
+	// 挂载时机与去重全部交给 bindHomeLayer：顶层自启和 astro:page-load 谁先谁后都只挂一次，
+	// 否则第二次挂载会把第一次那条 document.fonts.ready 回调放进来，contact 被拆成两套字符节点
+	bindHomeLayer("hero", {
+		media: "(min-width: 769px)",
+		boot: () => {
+			cleanupHomeHero?.();
+			cleanupHomeHero = mountHomeHero();
+		},
+		teardown: () => {
+			cleanupHomeHero?.();
+			cleanupHomeHero = null;
+		},
+	});
+</script>

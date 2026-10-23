@@ -1,0 +1,39 @@
+import type { GalleryConfig } from "@/types/config";
+
+// 相册配置
+export const galleryConfig: GalleryConfig = {
+	// 相册列表
+	albums: [
+		// 支持jpg/png/webp/avif/gif格式
+		// id: 相册唯一标识符（用于目录命名和URL路径），比如设置：id: "firefly-2026", 对应 public/gallery/firefly-2026/目录
+		// cover: 手动指定封面图（可选，不填会把cover.*文件作为封面图，如果没有cover.*文件，则使用第一张图片作为封面图）
+		// name: 相册名称
+		// description: 相册描述
+		// location: 相册拍摄地点
+		// date: 相册日期，格式为 YYYY-MM-DD，用于排序和显示
+		// tags: 相册标签，用于分类和过滤
+		// 每添加一个数组项就相当于添加了一个相册，记得在 public/gallery/ 目录下创建对应的子目录并放入图片
+		{
+			id: "大肥鱼人设",
+			name: "大肥鱼三视图",
+			description:
+				"收录大肥鱼人设三视图，由 GPT Image2.5 生成，用于角色形象设计参考。",
+			location: "gpt2.5",
+			date: "2026-10-24",
+			tags: ["大肥鱼", "GPT生图", "三视图"],
+		},
+		{
+			id: "大肥鱼k2",
+			name: "大肥鱼k2",
+			description:
+				"本相册收录大肥鱼（deepsekk 鲸鱼娘）相关图片，二次元幻想设定，呈现深海氛围、角色造型与情绪表达。图片由 Krea2 生成，用于记录创作过程与视觉参考。",
+			location: "gpt2.5",
+			date: "2026-10-24",
+			tags: ["大肥鱼", "krea2"],
+		},
+	],
+
+	// 瀑布流最小列宽(px)，浏览器根据容器宽度自动计算列数，默认 240
+	// 值越小列数越多，值越大列数越少
+	columnWidth: 240,
+};

@@ -1,0 +1,134 @@
+---
+import Icon from "@components/common/Icon.astro";
+import PaperDeckleDefs from "@components/common/PaperDeckleDefs.astro";
+import PhotoCard from "@components/pages/gallery/PhotoCard.astro";
+import { galleryConfig, siteConfig } from "@/config";
+import I18nKey from "@/i18n/i18nKey";
+import { i18n } from "@/i18n/translation";
+import MainGridLayout from "@/layouts/MainGridLayout.astro";
+import { buildAlbumBackground, scanAlbumPhotos } from "@/utils/gallery-utils";
+import { url } from "@/utils/url-utils";
+import "@/styles/components/post-hero.css";
+import "@/styles/components/post-header-nav.css";
+import "@/styles/components/post-accordion.css";
+import "@/styles/pages/gallery.css";
+import "@/styles/pages/gallery-detail.css";
+
+if (!siteConfig.pages.gallery) {
+	return Astro.redirect("/404/");
+}
+
+export function getStaticPaths() {
+	// 页面关闭时不生成任何相册详情页。
+	// 若在此仍返回路径，静态构建会为每个相册产出 meta-refresh 跳转存根页，
+	// 这些 URL 会绕过 sitemap 里对 /gallery/ 的精确匹配过滤
+	if (!siteConfig.pages.gallery) {
+		return [];
+	}
+	return galleryConfig.albums.map((album) => ({
+		params: { album: album.id },
+	}));
+}
+
+const { album: albumId } = Astro.params;
+const albumMeta = galleryConfig.albums.find((album) => album.id === albumId);
+
+if (!albumMeta) {
+	return Astro.redirect("/404/");
+}
+
+const photos = await scanAlbumPhotos(albumMeta.id);
+const backgroundPhoto = photos[0];
+const backgroundImage = backgroundPhoto
+	? await buildAlbumBackground(albumMeta.id, backgroundPhoto)
+	: undefined;
+---
+
+<MainGridLayout
+	title={albumMeta.name}
+	description={albumMeta.description || `${i18n(I18nKey.albumPrefix)}${albumMeta.name}`}
+	hasOwnH1={true}
+>
+	<article class="gallery-detail" data-gallery-detail data-gallery-page>
+		{backgroundPhoto && (
+			<div class="gallery-detail__backdrop" aria-hidden="true">
+				<img
+					src={backgroundImage}
+					alt=""
+					width={backgroundPhoto.width}
+					height={backgroundPhoto.height}
+					loading="eager"
+					fetchpriority="high"
+					decoding="async"
+				/>
+			</div>
+		)}
+
+		<header class="post-hero gallery-detail__hero">
+			<div class="post-hero__content">
+				<nav class="post-nav gallery-detail__breadcrumb" aria-label={i18n(I18nKey.breadcrumb)}>
+					<a href={url("/gallery/")} class="post-nav__back">
+						<Icon name="material-symbols:arrow-back" class="post-nav__icon" aria-hidden="true" />
+						<span>{i18n(I18nKey.galleryBackToAlbums)}</span>
+					</a>
+					<span class="gallery-detail__breadcrumb-separator" aria-hidden="true">/</span>
+					<span class="gallery-detail__breadcrumb-current" aria-current="page">{albumMeta.name}</span>
+				</nav>
+				<h1 class="post-hero__title">{albumMeta.name}</h1>
+			</div>
+
+			<div class="post-accordion gallery-detail__info">
+				<PaperDeckleDefs />
+				<div class="gallery-detail__info-content">
+					<div class="post-accordion__stats">
+						{albumMeta.date && (
+							<span class="post-accordion__stat">
+								<Icon name="material-symbols:calendar-today" aria-hidden="true" />
+								<time datetime={albumMeta.date}>{albumMeta.date}</time>
+							</span>
+						)}
+						{albumMeta.location && (
+							<span class="post-accordion__stat">
+								<Icon name="material-symbols:location-on" aria-hidden="true" />
+								<span>{albumMeta.location}</span>
+							</span>
+						)}
+						<span class="post-accordion__stat">
+							<Icon name="material-symbols:photo-library" aria-hidden="true" />
+							<span>{photos.length} {i18n(I18nKey.galleryPhotos)}</span>
+						</span>
+					</div>
+					{albumMeta.tags && albumMeta.tags.length > 0 && (
+						<div class="post-accordion__terms">
+							{albumMeta.tags.map((tag) => (
+								<span class="post-accordion__term-link">{tag}</span>
+							))}
+						</div>
+					)}
+					{albumMeta.description && (
+						<p class="post-accordion__desc">{albumMeta.description}</p>
+					)}
+				</div>
+			</div>
+		</header>
+
+		<div class="gallery-detail__stage">
+			{photos.length > 0 ? (
+				<div class="gallery-detail__photos">
+					{photos.map((photo, index) => (
+						<PhotoCard
+							photo={photo}
+							albumId={albumMeta.id}
+							alt={`${albumMeta.name} · ${index + 1} / ${photos.length}`}
+						/>
+					))}
+				</div>
+			) : (
+				<div class="gallery-detail__empty">
+					<Icon name="material-symbols:photo-library" class="text-6xl" aria-hidden="true" />
+					<p>{i18n(I18nKey.galleryNoAlbums)}</p>
+				</div>
+			)}
+		</div>
+	</article>
+</MainGridLayout>

@@ -1,0 +1,565 @@
+.post-hero {
+  position: relative;
+  width: 100%;
+}
+
+.post-hero__content {
+  --post-hero-inline-pad: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  /* 返回行靠左贴正文左缘，标题单独占行并居中 */
+  align-items: flex-start;
+  text-align: start;
+  /* 导航栏与返回行之间留出一段明显空白，避免标题区顶在导航条下沿 */
+  padding: 2.5rem var(--post-hero-inline-pad) 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .post-hero__content {
+    --post-hero-inline-pad: 2rem;
+    padding: 4rem var(--post-hero-inline-pad) 0.75rem;
+  }
+}
+
+.post-hero__title {
+  width: 100%;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  color: var(--deep-text);
+  text-align: center;
+  /* 居中排版本身不带侧向呼吸，标题文字要离开发卡左右缘（窄屏留 0.5rem） */
+  padding-inline: 0.5rem;
+  margin-bottom: 0.75rem;
+  word-break: break-word;
+}
+
+@media (min-width: 768px) {
+  .post-hero__title {
+    font-size: 2.25rem;
+    line-height: 2.75rem;
+    /* 叠加 hero 自身的 2rem 内边距，标题左右各离卡缘约 4.5rem */
+    padding-inline: 2.5rem;
+  }
+}
+
+/* 元信息已整体下沉到 post-accordion，这里只留分享弹窗的宿主与内部样式。
+   .post-hero__share-menu 不再渲染触发按钮，仅承载 <dialog>，供正文与右侧目录共用 */
+.post-hero__share-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.post-hero__share-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.post-hero__share-popover {
+  grid-template-columns: 7.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  width: min(32rem, calc(100vw - var(--space-8)));
+  max-height: calc(100dvh - var(--space-8));
+  margin: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-large);
+  background: var(--float-panel-bg);
+  box-shadow: 0 var(--space-3) var(--space-6) color-mix(in oklab, var(--deep-text) 14%, transparent);
+  color: var(--deep-text);
+}
+
+.post-hero__share-popover[open] {
+  display: grid;
+}
+
+.post-hero__share-popover::backdrop {
+  background: color-mix(in oklab, var(--deep-text) 40%, transparent);
+}
+
+.post-hero__share-dialog-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-divider);
+}
+
+.post-hero__share-dialog-header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.post-hero__share-close {
+  display: grid;
+  place-items: center;
+  width: var(--control-size);
+  height: var(--control-size);
+  border: 0;
+  border-radius: var(--radius-medium);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.post-hero__share-close:hover,
+.post-hero__share-close:focus-visible {
+  background: var(--btn-plain-bg-hover);
+}
+
+.post-hero__share-dialog-header svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.post-hero__share-url {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--line-divider);
+  border-radius: var(--radius-medium);
+  background: var(--card-surface);
+  color: var(--content-meta);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+}
+
+.post-hero__share-status {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+}
+
+.post-hero__share-status:empty {
+  display: none;
+}
+
+.post-hero__share-qr {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding-right: 1rem;
+  border-right: 1px solid var(--line-divider);
+}
+
+.post-hero__share-qr-image {
+  width: 6rem;
+  height: 6rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line-divider);
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
+.post-hero__share-qr-label,
+.post-hero__share-title {
+  color: var(--content-meta);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.post-hero__share-content {
+  min-width: 0;
+}
+
+.post-hero__share-title {
+  display: block;
+  margin-bottom: 0.6rem;
+  text-align: center;
+}
+
+.post-hero__share-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 0.5rem;
+}
+
+.post-hero__share-action {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--content-meta);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+
+.post-hero__share-action-icon {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--post-hero-share-action-color);
+  color: var(--post-hero-share-action-icon-color, #fff);
+  transition: transform 0.2s ease;
+}
+
+.post-hero__share-action-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.post-hero__share-action-label {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-hero__share-action:hover,
+.post-hero__share-action:focus-visible {
+  color: var(--deep-text);
+}
+
+.post-hero__share-action:hover .post-hero__share-action-icon,
+.post-hero__share-action:focus-visible .post-hero__share-action-icon {
+  transform: translateY(-2px);
+}
+
+.post-hero__share-action--qq {
+  --post-hero-share-action-color: #12b7f5;
+}
+
+.post-hero__share-action--email {
+  --post-hero-share-action-color: #ea4335;
+}
+
+.post-hero__share-action--feishu {
+  --post-hero-share-action-color: #3370ff;
+}
+
+.post-hero__share-action--x {
+  --post-hero-share-action-color: var(--deep-text);
+  --post-hero-share-action-icon-color: var(--page-bg);
+}
+
+.post-hero__share-action--whatsapp {
+  --post-hero-share-action-color: #25d366;
+}
+
+.post-hero__share-action--copy {
+  --post-hero-share-action-color: var(--primary);
+}
+
+/* 暗色主题下 --primary 为浅色，图标需改用深色才能看清 */
+:root.dark .post-hero__share-action--copy {
+  --post-hero-share-action-icon-color: oklch(0.08 0 0);
+}
+
+.post-hero__share-action--copy.is-copied {
+  --post-hero-share-action-color: #22c55e;
+}
+
+:root.dark .post-hero__share-action--copy.is-copied {
+  --post-hero-share-action-icon-color: #fff;
+}
+
+@media (max-width: 768px) {
+  .post-hero__share-popover {
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .post-hero__share-qr {
+    padding-right: 0.75rem;
+  }
+}
+
+/* ============================================
+   许可协议卡：撕纸毛边面板。描边和底色都挪到 __surface 这一层，
+   由共用的 --paper-deckle-filter 推出凹凸纸口 —— 所以这里既没有 border 也没有圆角。
+   __body / __actions 各带一层 surface，父级 isolation 兜住负 z-index；
+   滤镜只吃 surface，文字层不参与，否则正文会跟着抖。
+   ============================================ */
+.license-card {
+  position: relative;
+}
+
+.license-card__body,
+.license-card__actions {
+  position: relative;
+  isolation: isolate;
+}
+
+.license-card__surface {
+  position: absolute;
+  inset: 0;
+  z-index: -10;
+  background: var(--card-surface);
+  pointer-events: none;
+  filter: var(--paper-deckle-filter);
+}
+
+.license-card__surface--actions {
+  background: var(--article-surface-bg);
+}
+
+/* CC 水印要溢出裁切，所以单独包这一层；surface 在它外面，不受 overflow 影响 */
+.license-card__content {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 1.25rem;
+}
+
+.license-card__title {
+  color: var(--deep-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* 正文地址：不做下划线，悬停才从次级色抬到正文色 */
+.license-card__url {
+  display: block;
+  margin-top: 0.375rem;
+  color: var(--content-meta);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: color 160ms ease;
+}
+
+.license-card__url:hover,
+.license-card__url:focus-visible {
+  color: var(--link-color);
+}
+
+.license-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2.5rem;
+  margin: 1rem 0 0;
+}
+
+.license-card__meta-item {
+  min-width: 8rem;
+}
+
+.license-card__meta dt {
+  margin: 0 0 0.375rem;
+  color: var(--content-meta);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.license-card__meta dd {
+  margin: 0;
+  color: var(--deep-text);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.license-card__meta dd a {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.license-card__meta dd a:hover,
+.license-card__meta dd a:focus-visible {
+  color: var(--link-color);
+}
+
+.license-card__mark {
+  position: absolute;
+  top: 50%;
+  right: var(--space-6);
+  z-index: -1;
+  translate: 0 -50%;
+  font-size: 15rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--deep-text) 5%, transparent);
+  pointer-events: none;
+}
+
+/* 底部动作条：右侧目录面板可见时那一排动作已在面板里，这里整体收起。
+   条件与 .related-posts--bottom 完全一致 */
+.license-card__actions {
+  min-height: var(--control-size);
+  margin: -1px var(--space-8) 0;
+  padding: 0 var(--space-6);
+}
+
+@media (min-width: 96rem) and (hover: hover) and (pointer: fine) {
+  .license-card__actions {
+    display: none;
+  }
+}
+
+.license-card__action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem var(--space-6);
+}
+
+.license-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding-block: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--content-meta);
+  font-size: 0.875rem;
+  /* 同一套样式既挂 <button> 也挂 <a>，链接不带下划线 */
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+
+.license-card__action:hover,
+.license-card__action:focus-visible {
+  color: var(--deep-text);
+}
+
+.license-card__action-icon {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* ============================================
+   底部分隔线：细线居中嵌标题，线在文字处断开。
+   整段底部只此一条线，相关文章与上下篇都挂在它下面。
+   ============================================ */
+.post-section-divider {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-6);
+}
+
+.post-section-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--line-divider);
+}
+
+/* 标签垫一层页面底色把身后的线断掉；正文卡本身透明，取页面色即可 */
+.post-section-divider__label {
+  position: relative;
+  padding-inline: var(--space-4);
+  background: var(--page-bg);
+  color: var(--content-meta);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+}
+
+/* 默认「其他文章」；底部确实摆了相关文章区块才改口「相关文章」 */
+.post-section-divider__label--related {
+  display: none;
+}
+
+#post-container:has(.related-posts--bottom) .post-section-divider__label--related {
+  display: inline;
+}
+
+#post-container:has(.related-posts--bottom) .post-section-divider__label--other {
+  display: none;
+}
+
+/* 宽屏下相关文章由右侧目录面板接管、底部区块 display:none，退回「其他文章」 */
+@media (min-width: 96rem) and (hover: hover) and (pointer: fine) {
+  .post-section-divider__label--related {
+    display: none;
+  }
+
+  .post-section-divider__label--other {
+    display: inline;
+  }
+}
+
+/* ============================================
+   底部上一篇 / 下一篇：分隔线之下的两条无边框文字链
+   ============================================ */
+.post-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 2rem;
+  /* 与许可卡、分隔线、相关文章共用 24px 节奏：正文卡 pb-4 + 外层 mb-2 已经凑够 */
+  margin-top: 0;
+  margin-bottom: 2rem;
+  font-size: 0.875rem;
+}
+
+.post-pager__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--content-meta);
+  text-decoration: none;
+  transition: color 160ms ease-out;
+}
+
+.post-pager__link--next {
+  margin-left: auto;
+}
+
+.post-pager__link:hover,
+.post-pager__link:focus-visible {
+  color: var(--link-color);
+}
+
+.post-pager__link:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 3px;
+  border-radius: var(--radius-small);
+}
+
+.post-pager__icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: 0 0 auto;
+}
+
+.post-pager__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .post-pager__link {
+    max-width: 45%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-hero__share-popover,
+  .post-hero__share-action-icon,
+  .post-pager__link,
+  .license-card__url,
+  .license-card__action {
+    transition-duration: 0.01ms;
+  }
+}

@@ -1,0 +1,189 @@
+/* TOC 共享样式 */
+
+/* TOC 滚动容器 */
+.toc-scroll-container {
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	scroll-behavior: smooth;
+	padding-right: 0.125rem;
+}
+
+/* TOC 内容容器 */
+.toc-content {
+	display: flex;
+	flex-direction: column;
+	gap: 0.28rem;
+	position: relative;
+	overflow: visible;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	contain: layout;
+	align-items: stretch;
+	padding: 0.125rem 0;
+}
+
+/* TOC 链接样式 */
+.toc-item {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	text-decoration: none;
+	color: inherit;
+	border-radius: 0.875rem;
+	transition:
+		border-style 0.12s ease,
+		border-color 0.12s ease,
+		transform 0.14s ease,
+		color 0.14s ease;
+	width: 100%;
+	min-width: 0;
+	flex-shrink: 0;
+	max-width: 100%;
+	overflow: hidden;
+	box-sizing: border-box;
+	position: relative;
+	padding: 0.48rem 0.62rem;
+	min-height: 2.2rem;
+	/* 默认透明边框占位，避免 hover 时跳动 */
+	border: 1px solid transparent;
+	background: transparent;
+}
+
+.toc-item:hover {
+	background: transparent;
+	transform: translateX(4px);
+	/* hover 时显示实线边框 */
+	border-top-style: solid;
+	border-right-style: solid;
+	border-bottom-style: solid;
+	border-left-style: solid;
+	border-color: oklch(0.15 0 0);
+}
+
+:root.dark .toc-item:hover {
+	border-color: oklch(0.85 0 0);
+}
+
+.toc-item:active {
+	background: transparent;
+}
+
+/* 当前章节的左侧主题色竖条；不再用虚线活动框。 */
+.toc-item::before {
+	content: "";
+	position: absolute;
+	top: 0.42rem;
+	bottom: 0.42rem;
+	left: 0.08rem;
+	width: 2px;
+	border-radius: 999px;
+	background: var(--article-title-marker);
+	opacity: 0;
+	transform: scaleY(0.4);
+	transform-origin: center;
+	transition:
+		opacity 160ms ease,
+		transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+	pointer-events: none;
+}
+
+.toc-item.visible::before {
+	opacity: 1;
+	transform: scaleY(1);
+}
+
+.toc-item.toc-level-1 {
+	padding-left: 1.08rem;
+}
+
+.toc-item.toc-level-2 {
+	padding-left: 1.62rem;
+}
+
+.toc-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	flex: 1;
+	max-width: calc(100% - 2.4rem);
+	box-sizing: border-box;
+	font-size: 0.86rem;
+	line-height: 1.3;
+	letter-spacing: 0.01em;
+}
+
+.toc-label-primary {
+	color: color-mix(in oklab, var(--content-meta) 78%, var(--primary));
+}
+
+.toc-label-secondary {
+	color: color-mix(in oklab, var(--content-meta) 88%, transparent);
+}
+
+.toc-badge {
+	display: grid;
+	place-items: center;
+	flex-shrink: 0;
+	width: 1.35rem;
+	height: 1.35rem;
+	border-radius: 0.5rem;
+	font-size: 0.68rem;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.toc-badge-index {
+	background: var(--toc-badge-bg);
+	color: var(--btn-content);
+}
+
+.toc-badge-dot {
+	width: 0.48rem;
+	height: 0.48rem;
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--primary) 26%, var(--line-color));
+}
+
+.toc-badge-dot-sm {
+	width: 0.34rem;
+	height: 0.34rem;
+	background: color-mix(in oklab, var(--primary) 16%, var(--line-color));
+}
+
+.toc-item.visible .toc-label {
+	color: var(--article-title-marker);
+	opacity: 1;
+}
+
+.toc-item.visible .toc-badge-dot,
+.toc-item.visible .toc-badge-dot-sm {
+	background: var(--article-title-marker);
+}
+
+.toc-item.visible .toc-badge-index {
+	color: var(--article-title-marker);
+}
+
+/* 活动指示器仍由 JS 更新位置/高度，但不再绘制虚线活动框；
+   当前章节的外观改由 .toc-item.visible 的左侧竖条和主题色文字承担。 */
+.toc-active-indicator {
+	display: none !important;
+}
+
+@media (max-width: 768px) {
+	.toc-item {
+		padding: 0.44rem 0.58rem;
+		border-radius: 0.78rem;
+	}
+
+	.toc-item.toc-level-1 {
+		padding-left: 0.94rem;
+	}
+
+	.toc-item.toc-level-2 {
+		padding-left: 1.34rem;
+	}
+}

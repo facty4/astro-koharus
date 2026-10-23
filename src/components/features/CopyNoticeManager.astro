@@ -1,0 +1,37 @@
+---
+// 文章复制提示监听器（全局常驻，位于 Swup 容器外）。
+//
+// 监听 document 的 copy 事件：仅当复制内容落在文章正文（#post-container）内时，
+// 往提示栈丢一条 success 提示。固定 id 让重复复制在原卡片上重新计时，不叠出
+// 一摞同样的提示；监听挂在 document 上，Swup 换页后依然有效。
+// 提示的外观与交互见 ToastStack.astro 与 src/utils/toast-stack-controller.ts。
+---
+
+<script>
+	import I18nKey from "@i18n/i18nKey";
+	import { i18n } from "@i18n/translation";
+	import { showToast } from "@/utils/toast-stack-controller";
+	import { definePersistentIsland } from "@/utils/swup-lifecycle";
+
+	definePersistentIsland("copy-notice", () => {
+		const POST_CONTENT_SELECTOR = "#post-container";
+		const COPY_TOAST_ID = "copy-notice";
+
+		document.addEventListener("copy", () => {
+			const selection = document.getSelection();
+			if (!selection || selection.isCollapsed || selection.rangeCount === 0)
+				return;
+
+			// 锚点节点必须落在文章正文内，其它区域（评论区、输入框等）不提示
+			const anchor = selection.anchorNode;
+			const host = anchor instanceof Element ? anchor : anchor?.parentElement;
+			if (!host?.closest(POST_CONTENT_SELECTOR)) return;
+
+			showToast({
+				id: COPY_TOAST_ID,
+				type: "success",
+				title: i18n(I18nKey.copyNotice),
+			});
+		});
+	});
+</script>

@@ -1,0 +1,26 @@
+---
+import type { HeroStickerConfig } from "@/types/config";
+
+interface Props {
+	config: HeroStickerConfig;
+}
+
+const { config } = Astro.props;
+---
+
+<figure
+	class="home-hero__sticker"
+	data-hero-sticker
+	data-press-sound={config.sounds.press}
+	data-loosen-sound={config.sounds.loosen}
+>
+	<img
+		class="home-hero__sticker-image"
+		src={config.image}
+		alt={config.alt}
+		width="1254"
+		height="1254"
+		loading="eager"
+		decoding="async"
+	/>
+</figure>

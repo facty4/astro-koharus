@@ -1,0 +1,170 @@
+/* ==========================================================================
+   左下角角色 + 想法气泡（贴纸漫画式的思考泡泡）
+   外层 sticky 贴视口底边、自身零高度：正常流位置在第二层底部，
+   所以从首屏一路浮到第二层，最后停在第二层左下角，随第二层一起滚走。
+   气泡是贴纸质感，白纸黑墨不随主题切换。
+   ========================================================================== */
+
+.home-hero__dialogue {
+	--home-dialogue-size: clamp(12rem, 13vw, 16rem);
+	--home-dialogue-ink: oklch(0.22 0.01 300);
+	--home-dialogue-paper: oklch(1 0 0);
+	--home-dialogue-stroke: 0.2rem;
+	/* 玩偶回弹：优先用能过冲再收住的 linear() 弹簧，不支持时退回带过冲的三次贝塞尔 */
+	--home-dialogue-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	position: sticky;
+	bottom: 0;
+	z-index: 3;
+	width: 100vw;
+	height: 0;
+	margin-inline: calc(50% - 50vw);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+	.home-hero__dialogue {
+		--home-dialogue-spring: linear(
+			0,
+			0.36 12%,
+			0.86 26%,
+			1.12 36%,
+			0.98 46%,
+			1.02 58%,
+			0.995 74%,
+			1
+		);
+	}
+}
+
+/* 角色本体的盒子，底边压在视口底边上、左缘贴住视口左缘（图本身有透明留白，
+   看着就是卡在角上）。JS 接管前保持隐藏，由 hero 时间线把它从底边推出来 */
+.home-hero__dialogue-anchor {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	width: var(--home-dialogue-size);
+	aspect-ratio: 1;
+	opacity: 0;
+	visibility: hidden;
+	will-change: transform, opacity;
+}
+
+.home-hero__sticker {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	line-height: 0;
+	filter: drop-shadow(0 0.5rem 0.8rem rgb(0 0 0 / 26%));
+	/* 支点在底边：压下去时头顶动、脚不动，才像按在桌上的一团棉花 */
+	transform-origin: 50% 100%;
+	transition: translate 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 按下是「按下去」的挤压，不是跳一下：变扁同时变宽，体积感留住。
+   scale 过渡只写在按住这一侧 —— 松手时立刻交还给 WAAPI 的连弹，
+   两边各弹一次会在同一个 transform 上打架 */
+.home-hero__sticker[data-pressed="true"] {
+	scale: 1.07 0.9;
+	transition: scale 220ms var(--home-dialogue-spring);
+}
+
+.home-hero__dialogue-trigger {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 50% 50% 0 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.home-hero__dialogue-trigger:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 2px;
+}
+
+/* 想法气泡：粗描边白椭圆，挂在角色头顶右上方，从左下角（小圆点那一侧）冒出来。
+   text-wrap: balance 让两行等长，文字角点才不会戳出椭圆边 */
+.home-hero__dialogue-bubble {
+	position: absolute;
+	bottom: 92%;
+	left: 52%;
+	z-index: 1;
+	width: max-content;
+	max-width: min(16rem, 42vw);
+	margin: 0;
+	padding: 0.95rem 1.75rem;
+	border: var(--home-dialogue-stroke) solid var(--home-dialogue-ink);
+	border-radius: 50%;
+	background: var(--home-dialogue-paper);
+	color: var(--home-dialogue-ink);
+	font-size: clamp(0.88rem, 0.95vw, 1rem);
+	font-weight: 800;
+	line-height: 1.45;
+	text-align: center;
+	text-wrap: balance;
+	transform-origin: 0% 100%;
+	cursor: pointer;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity 180ms ease,
+		visibility 0s linear 180ms;
+}
+
+.home-hero__dialogue-bubble[data-open="true"] {
+	opacity: 1;
+	visibility: visible;
+	transition: none;
+}
+
+/* 思考泡泡的两颗小圆点，从气泡左下角一路落向角色头顶 */
+.home-hero__dialogue-bubble::before,
+.home-hero__dialogue-bubble::after {
+	content: "";
+	position: absolute;
+	border: var(--home-dialogue-stroke) solid var(--home-dialogue-ink);
+	border-radius: 50%;
+	background: var(--home-dialogue-paper);
+}
+
+.home-hero__dialogue-bubble::before {
+	top: calc(100% + 0.2rem);
+	left: 0.9rem;
+	width: 1rem;
+	height: 0.85rem;
+}
+
+.home-hero__dialogue-bubble::after {
+	top: calc(100% + 1.25rem);
+	left: 0.1rem;
+	width: 0.62rem;
+	height: 0.52rem;
+}
+
+.home-hero__sticker-image {
+	display: block;
+	width: 100%;
+	height: auto;
+	object-fit: contain;
+}
+
+/* 移动端首页由 HomeMobile 承担，桌面 hero 不挂载，角色一并隐藏 */
+@media (max-width: 768px) {
+	.home-hero__dialogue {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-hero__dialogue-anchor {
+		opacity: 1;
+		visibility: visible;
+	}
+
+	.home-hero__sticker,
+	.home-hero__sticker[data-pressed="true"],
+	.home-hero__dialogue-bubble {
+		transition: none;
+	}
+}

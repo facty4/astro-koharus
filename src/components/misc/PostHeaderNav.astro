@@ -1,0 +1,31 @@
+---
+import I18nKey from "@i18n/i18nKey";
+import { i18n } from "@i18n/translation";
+import { url } from "@/utils/url-utils";
+
+interface Props {
+	/** 当前文章的分类，缺省视作未分类 */
+	category?: string;
+}
+
+const { category } = Astro.props;
+
+const archiveUrl = url("/archive/");
+const label = category?.trim() || i18n(I18nKey.uncategorized);
+const backHref = category?.trim()
+	? `${archiveUrl}?category=${encodeURIComponent(label)}`
+	: `${archiveUrl}?uncategorized=true`;
+---
+
+{/* 标题上一层：只有箭头 + 「返回」，整行靠左。
+    直接落在归档（带上当前分类的筛选），不再劫持成 history.back() */}
+<nav class="post-nav" aria-label={i18n(I18nKey.archive)}>
+  <a
+    class="post-nav__back"
+    href={backHref}
+    title={i18n(I18nKey.postNavBack)}
+  >
+    <svg class="post-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></svg>
+    <span>{i18n(I18nKey.postNavBack)}</span>
+  </a>
+</nav>

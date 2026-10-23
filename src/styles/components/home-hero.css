@@ -1,0 +1,697 @@
+html:has(.home-hero) #top-row {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	width: auto;
+	z-index: 1000;
+	background: transparent;
+}
+
+.home-hero {
+	--home-hero-ink: oklch(1 0 0);
+	--home-hero-surface: oklch(0.075 0 0);
+	--home-hero-border: color-mix(in oklch, var(--home-hero-ink) 32%, transparent);
+	--home-hero-border-soft: color-mix(in oklch, var(--home-hero-ink) 20%, transparent);
+	--home-hero-shadow: color-mix(in oklch, var(--home-hero-surface) 78%, transparent);
+	/* 首屏拼图底层：纯色 page-bg + 发丝榫头缝线，两端颜色全取主题令牌，
+	   所以亮暗切换自动反相，不需要 :root.dark 分支。拼合完成后由 .home-hero__backdrop
+	   淡入把这层缝线遮掉，整图再上移居中进入照片态。 */
+	--home-hero-puzzle-line: color-mix(in oklch, var(--deep-text) 13%, transparent);
+	/* 左上标题与右下 contact 都压在纯色底上，统一用正文色 */
+	--home-hero-title-ink: var(--deep-text);
+	--home-hero-contact-ink: var(--deep-text);
+	/* 两条横线之间的画幅量尺：雨与照片态的高度约束都按它算 */
+	--home-hero-band-inset: var(--layer-pad-block) 0;
+	/* 照片态：描边随主题反相（亮色黑边 / 暗色白边，取 --deep-text），
+	   深色阴影把整图从底上抬起来。
+	   --home-hero-photo-w 是照片落位后的实际宽度，控制器测量后回写精确 px，
+	   这里的值是 JS 未接管前（减弱动效等）的兜底 */
+	--home-hero-photo-edge: color-mix(in oklch, var(--deep-text) 92%, transparent);
+	--home-hero-photo-shadow: color-mix(in oklch, var(--home-hero-surface) 70%, transparent);
+	--home-hero-photo-w: min(58vw, 52rem, calc((100svh - 2 * var(--layer-pad-block)) * 1.05));
+	position: relative;
+	width: 100vw;
+	height: 100svh;
+	min-height: 34rem;
+	margin-right: calc(50% - 50vw);
+	margin-left: calc(50% - 50vw);
+	overflow: clip;
+	isolation: isolate;
+	background: var(--home-hero-surface);
+	color: var(--home-hero-ink);
+	contain: layout paint;
+}
+
+/* 动效脚本接管前先隐藏首屏标题和联系按钮，避免静态 HTML 首帧闪现整段文字。 */
+.home-page--motion-pending .home-hero__identity,
+.home-page--motion-pending .home-hero__contact {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* hero 固定使用自身的近黑舞台（oklch(0.075)）+ 纯白墨水字，不随主题切换：
+   亮色页面里它是全屏对比区，暗色下与页面底色仅差 #0d0d0d→#101010 一档，肉眼无断层；
+   绑定 --page-bg 的旧方案反而把 ink 褪成浅灰，已废弃 */
+
+.home-hero__visual,
+.home-hero__backdrop,
+.home-hero__puzzle,
+.home-hero__rain {
+	position: absolute;
+	inset: 0;
+}
+
+/* 拼合完成后随导引线展开同步淡入的纯色底：把缝线遮干净，
+   让首屏背景与第二层同为 --page-bg，交接处不再有拼图纹理的割裂感 */
+.home-hero__backdrop {
+	z-index: 0;
+	background: var(--page-bg);
+	opacity: 0;
+}
+
+/* 雨只下在井字虚线围出的画幅里：横向收到两条竖虚线之间，纵向仍是两条横线之间。
+   canvas 是替换元素，inset 撑不开宽高，必须显式给；像素缓冲由控制器按这个盒子回写 */
+.home-hero__rain {
+	inset: var(--layer-pad-block) auto auto;
+	left: calc(50% - var(--guide-col) / 2);
+	width: var(--guide-col);
+	height: calc(100% - 2 * var(--layer-pad-block));
+}
+
+/* 首屏拼图底层：纯色底 + 榫头缝线（几何见 utils/home-hero-motion.ts），
+   常驻在影像之下，不参与任何淡出 */
+.home-hero__puzzle {
+	z-index: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.home-hero__puzzle-bg {
+	fill: var(--page-bg);
+}
+
+.home-hero__puzzle-seam {
+	fill: none;
+	stroke: var(--home-hero-puzzle-line);
+	stroke-width: 1;
+	stroke-linecap: round;
+}
+
+/* 井字导引线复用第二层的 HomeGuideFrame，但两层分开摆：
+   竖线留在整图之下（z 序与整图同为 0，DOM 在前），照片态收进列内后竖线全程露在
+   照片两侧，只作衔接上下的背景；横线提到整图与雨之上，压在画幅上下边缘，
+   不会被整图盖掉半根。
+   第一幕不显示：两组线先收成中点（clip-path 收拢），拼合完成后由滚动时间线向两端展开；
+   交叉方向的 -5px 给 4px 粗描边（外沿各占一半）留出余量。
+   竖线虚线改从底边起算、以空隙开头：第二层竖线从顶边以实线段开头，
+   两层在交接处按 14/12 的节奏续上，不受首屏高度能否整除虚线周期影响 */
+.home-hero .home-guide__guide--h {
+	z-index: 21;
+	clip-path: inset(-5px 50% -5px 50%);
+}
+
+.home-hero .home-guide__guide--v {
+	transform: translateX(-50%) scaleY(-1);
+	clip-path: inset(50% -5px 50% -5px);
+}
+
+.home-hero .home-guide__guide--v .g-guide {
+	stroke-dashoffset: 13;
+}
+
+.home-hero__visual {
+	z-index: 0;
+	overflow: hidden;
+}
+
+/* 通栏画幅的量尺：控制器按它算整图的 cover 缩放与外层上下裁切，自身不绘制 */
+.home-hero__mosaic-target {
+	position: absolute;
+	inset: var(--home-hero-band-inset);
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.home-hero__mosaic-frame {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: clamp(1rem, 3vh, 2.75rem);
+	z-index: 1;
+	width: min(84vw, 90rem);
+	/* 布局负责居中，整图的自然比例负责高度；transform 只交给滚动动画。 */
+	margin-inline: auto;
+	transform-origin: 50% 50%;
+	will-change: transform;
+}
+
+.home-hero__mosaic-grid {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.home-hero__mosaic-tile {
+	position: absolute;
+	display: block;
+	opacity: 0;
+	visibility: hidden;
+	transform: translate3d(
+		var(--home-hero-tile-x),
+		var(--home-hero-tile-y),
+		0
+	) rotate(var(--home-hero-tile-rotation)) scale(var(--home-hero-tile-scale));
+	filter: blur(var(--home-hero-tile-blur));
+	will-change: transform, opacity;
+}
+
+.home-hero__mosaic-tile-image {
+	display: block;
+	width: 100%;
+	height: 100%;
+	background-image: var(--home-hero-mosaic-image);
+	background-repeat: no-repeat;
+	background-size: calc(var(--home-hero-mosaic-columns) * 100%) calc(var(--home-hero-mosaic-rows) * 100%);
+	background-position: var(--home-hero-tile-bg-x) var(--home-hero-tile-bg-y);
+}
+
+/* 图片就绪后才渐入，避免滚动时间线初始化时先闪现一帧完整碎片。 */
+.home-hero__mosaic-tile.is-idle-visible .home-hero__mosaic-tile-image {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.home-hero__mosaic-complete {
+	position: relative;
+	z-index: 1;
+	display: block;
+	opacity: 0;
+	visibility: hidden;
+	overflow: hidden;
+	border-radius: 0.75rem;
+	box-shadow: 0 2.4rem 4.8rem -1.6rem var(--home-hero-photo-shadow);
+	pointer-events: none;
+}
+
+/* 照片描边：8 条 pathLength=1000 的笔画（几何由控制器写入 d），
+   dashoffset 由滚动时间线从 1000 推到 0，边框即从四角向四边中点蔓延闭合 */
+.home-hero__photo-frame {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.home-hero__photo-frame path {
+	fill: none;
+	stroke: var(--home-hero-photo-edge);
+	stroke-width: 0.5rem;
+	stroke-dasharray: 1000;
+	stroke-dashoffset: 1000;
+}
+
+/* 叠加图：在拼合框内，跟着照片一起缩放平移；
+   滑入位移与自己的倾角（PHOTO_OVERLAY_ROTATION）由滚动时间线驱动 */
+.home-hero__photo-overlay {
+	position: absolute;
+	top: 64%;
+	left: 12%;
+	z-index: 3;
+	width: 74%;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	will-change: transform, opacity;
+}
+
+.home-hero__photo-overlay-image {
+	display: block;
+	width: 100%;
+	border: 0.4rem solid var(--home-hero-photo-edge);
+	border-radius: 0.9rem;
+	box-shadow: 0 1.8rem 3.6rem -1.4rem var(--home-hero-photo-shadow);
+}
+
+/* 图片右上角作者标牌：深色磨砂小片，压在图片内容上所以不随主题反色 */
+.home-hero__photo-author {
+	position: absolute;
+	top: 0.9rem;
+	right: 0.9rem;
+	z-index: 4;
+	padding: 0.2em 0.65em;
+	border-radius: 0.45rem;
+	background: rgb(6 7 9 / 55%);
+	-webkit-backdrop-filter: blur(0.35rem);
+	backdrop-filter: blur(0.35rem);
+	color: rgb(255 255 255 / 92%);
+	font-size: 0.8rem;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* 主图标牌在拼合框内会随照片缩放，字号按落位比例放大回补偿；
+   淡入由控制器时间线驱动，接管前先藏住 */
+.home-hero__mosaic-frame > .home-hero__photo-author {
+	top: 1.4rem;
+	right: 1.4rem;
+	font-size: 1.3rem;
+	opacity: 0;
+	visibility: hidden;
+	will-change: opacity;
+}
+
+.home-hero__mosaic-complete img {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.home-hero__rain {
+	z-index: 20;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 240ms ease;
+}
+
+.home-hero__rain.is-active {
+	opacity: 1;
+}
+
+/* 票签使用照片落位后剩余的列宽；上下拉开、左右轻微错位，延续拼贴节奏。 */
+.home-hero__intro {
+	--intro-ink: var(--deep-text);
+	--intro-paper: color-mix(in oklch, var(--page-bg) 92%, var(--deep-text));
+	--intro-stagger: clamp(0.75rem, 1.5vw, 1.75rem);
+	position: absolute;
+	top: 50%;
+	right: calc(50% - var(--guide-col) / 2);
+	z-index: 25;
+	display: grid;
+	gap: clamp(1.5rem, 5svh, 3.5rem);
+	width: calc(var(--guide-col) - var(--home-hero-photo-w) - var(--space-6));
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+
+/* 双线之间的环带完全透明，内框填纯色；墨色和底色随主题切换，不加阴影。 */
+.home-hero__intro-card {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: center;
+	min-width: 0;
+	min-height: clamp(5.5rem, 10svh, 7rem);
+	margin: 0;
+	padding: var(--space-5) 11%;
+	padding-left: calc(clamp(4rem, 5.5vw, 6rem) + var(--space-3));
+	color: var(--intro-ink);
+	isolation: isolate;
+	font-size: clamp(0.9rem, 1.05vw, 1.125rem);
+	font-weight: 600;
+	line-height: 1.75;
+	opacity: 0;
+	visibility: hidden;
+	transform-origin: 100% 100%;
+	will-change: transform, opacity;
+}
+
+.home-hero__intro-card:nth-child(odd) {
+	margin-right: var(--intro-stagger);
+}
+
+.home-hero__intro-card:nth-child(even) {
+	margin-left: var(--intro-stagger);
+}
+
+.home-hero__intro-frame {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	fill: none;
+	stroke: var(--intro-ink);
+	stroke-width: 1.25;
+}
+
+.home-hero__intro-frame path {
+	vector-effect: non-scaling-stroke;
+}
+
+.home-hero__intro-frame .home-hero__intro-paper {
+	fill: var(--intro-paper);
+}
+
+.home-hero__intro-frame .home-hero__intro-outline {
+	stroke-width: 2;
+}
+
+/* 只提供 clipPath 定义，不参与布局 */
+.home-hero__intro-defs {
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+.home-hero__intro-index {
+	/* 序号当装饰大字嵌进票签：整字压在左边线上，只被边框吃掉一点点，探出边框的部分沿
+	   内框纸面形状裁掉（左边线带凸出的标签，直刀切会悬空，故用 clipPath 贴着边框），
+	   右边再用一段铺满字身的 mask 渐变溶进纸面。独立于正文排版，不撑高票签。 */
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center start;
+	clip-path: url(#home-hero-intro-paper);
+	color: color-mix(in oklch, var(--intro-ink) 34%, var(--intro-paper));
+	font-family: "KaiTi", "STKaiti", "Kaiti SC", "Songti SC", "SimSun", serif;
+	font-size: clamp(4.5rem, 6vw, 6.5rem);
+	font-weight: 700;
+	line-height: 1;
+	mask-image: linear-gradient(to right, #000 0, transparent 0.92em);
+	-webkit-mask-image: linear-gradient(to right, #000 0, transparent 0.92em);
+	user-select: none;
+}
+
+.home-hero__intro-text {
+	margin: 0;
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+}
+
+.home-hero__identity {
+	position: absolute;
+	top: 0;
+	left: clamp(2rem, 4.5vw, 5rem);
+	z-index: 3;
+	display: flex;
+	height: 50svh;
+	max-width: calc(100vw - 4rem);
+	flex-direction: column;
+	justify-content: center;
+	margin: 0;
+	will-change: transform, opacity;
+	color: var(--home-hero-title-ink);
+}
+
+.home-hero__filter {
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}
+
+.home-hero__title {
+	margin: 0;
+	font-family: var(--font-sans);
+	font-size: clamp(7.5rem, 10.8vw, 9.5rem);
+	font-weight: 760;
+	line-height: 1.08;
+	letter-spacing: 0;
+	text-wrap: balance;
+	overflow: visible;
+}
+
+/* 左上角字标：canvas 矢量描边动画（见 utils/home-hero-wordmark.ts）。
+   占位文字负责撑出与静态版式一致的盒子并兜底无 JS / 减弱动效场景，
+   挂载后由 canvas 接手；padding 给选择框与闪烁小方块留出画布余量，
+   等值负 margin 把多出来的尺寸从布局里扣掉，视觉位置不变。 */
+.home-hero__wordmark {
+	position: relative;
+	display: inline-block;
+	padding: 4rem 6rem;
+	margin: -4rem -6rem;
+	color: var(--home-hero-title-ink);
+	touch-action: pan-y;
+	user-select: none;
+}
+
+.home-hero__wordmark-canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.home-hero__wordmark.is-mounted .home-hero__wordmark-text {
+	color: transparent;
+}
+
+.home-hero__wordmark.is-mounted .home-hero__wordmark-canvas {
+	opacity: 1;
+}
+
+.home-hero__occupation {
+	margin: var(--space-4) 0 0;
+	color: color-mix(in oklch, var(--home-hero-title-ink) 64%, transparent);
+	font-size: 2rem;
+	font-weight: 500;
+	letter-spacing: 0;
+}
+
+.home-hero__contact {
+	position: absolute;
+	right: clamp(2.5rem, 6vw, 8rem);
+	bottom: clamp(3rem, 8vh, 7rem);
+	z-index: 4;
+	display: flex;
+	width: min(36vw, 38rem);
+	min-height: clamp(11rem, 24vh, 18rem);
+	align-items: flex-end;
+	justify-content: flex-end;
+	text-align: right;
+	will-change: transform, opacity;
+}
+
+.home-hero__contact-link {
+	display: block;
+	margin: 0;
+	color: transparent;
+	font-family: var(--font-sans);
+	font-size: clamp(3.75rem, 6.6vw, 8rem);
+	font-weight: 760;
+	line-height: 0.88;
+	letter-spacing: 0;
+	text-decoration: none;
+}
+
+.home-hero__contact-platform,
+.home-hero__contact-handle {
+	--home-hero-melt-size: 1.1rem;
+	--home-hero-melt-width: 0.6rem;
+	--home-hero-melt-gap: 0.28rem;
+	display: block;
+	padding: 0.08em 0.12em 0.16em;
+	margin: -0.08em -0.12em -0.16em;
+	background-image: repeating-linear-gradient(
+		45deg,
+		var(--home-hero-contact-ink) 0 var(--home-hero-melt-width),
+		transparent var(--home-hero-melt-width) calc(var(--home-hero-melt-width) + var(--home-hero-melt-gap))
+	);
+	background-clip: text;
+	background-size: var(--home-hero-melt-size) var(--home-hero-melt-size);
+	filter: url("#home-hero-gooey");
+	animation: home-hero-melt 1.25s linear infinite;
+}
+
+.home-hero__contact-platform {
+	font-size: 0.48em;
+	line-height: 1;
+}
+
+.home-hero__contact-handle {
+	white-space: nowrap;
+}
+
+.home-hero__contact-link[href]:hover,
+.home-hero__contact-link[href]:focus-visible {
+	filter: brightness(0.82);
+}
+
+.home-hero__contact-link[href]:focus-visible {
+	outline: 2px solid var(--home-hero-contact-ink);
+	outline-offset: 0.5rem;
+}
+
+@keyframes home-hero-melt {
+	to {
+		background-position: var(--home-hero-melt-size) 0;
+	}
+}
+
+/* 风吹散落文字（Scatter random）：拆字后宿主只负责占位，字符承载渐变与 gooey 效果 */
+.home-hero__contact-platform.home-hero__fly-host,
+.home-hero__contact-handle.home-hero__fly-host {
+	position: relative;
+	color: transparent;
+	background-image: none;
+	filter: none;
+	animation: none;
+}
+
+.home-hero__fly-placeholder {
+	visibility: hidden;
+	pointer-events: none;
+	user-select: none;
+}
+
+.home-hero__fly-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.home-hero__fly-char {
+	position: absolute;
+	color: transparent;
+	white-space: nowrap;
+	background-image: repeating-linear-gradient(
+		45deg,
+		var(--home-hero-contact-ink) 0 var(--home-hero-melt-width),
+		transparent var(--home-hero-melt-width) calc(var(--home-hero-melt-width) + var(--home-hero-melt-gap))
+	);
+	background-clip: text;
+	background-size: var(--home-hero-melt-size) var(--home-hero-melt-size);
+	background-position: var(--home-hero-fly-bg-x, 0px) var(--home-hero-fly-bg-y, 0px);
+	filter: url("#home-hero-gooey");
+	animation: home-hero-melt-fly 1.25s linear infinite;
+	will-change: transform, opacity;
+}
+
+@keyframes home-hero-melt-fly {
+	to {
+		background-position: calc(var(--home-hero-fly-bg-x, 0px) + var(--home-hero-melt-size))
+			var(--home-hero-fly-bg-y, 0px);
+	}
+}
+
+@media (max-width: 768px) {
+	.home-hero {
+		height: 100vh;
+		height: 100lvh;
+		min-height: 32rem;
+	}
+
+	.home-hero__mosaic-frame {
+		bottom: max(var(--space-5), 5svh);
+		width: min(86vw, 28rem);
+	}
+
+	.home-hero__mosaic-tile-image {
+		background-image: var(--home-hero-mosaic-image-mobile);
+	}
+
+	.home-hero__identity {
+		left: var(--space-5);
+	}
+
+	.home-hero__identity {
+		top: 0;
+		height: 46svh;
+	}
+
+	.home-hero__identity {
+		max-width: calc(100vw - 2.5rem);
+	}
+
+	.home-hero__title {
+		font-size: 4.5rem;
+	}
+
+	.home-hero__occupation {
+		margin-top: var(--space-3);
+		font-size: 1.25rem;
+	}
+
+	.home-hero__contact {
+		right: 1rem;
+		bottom: 1.5rem;
+		width: min(52vw, 17rem);
+		min-height: 8rem;
+	}
+
+	.home-hero__contact-link {
+		font-size: clamp(2.6rem, 10vw, 4.5rem);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.home-hero {
+		min-height: 32rem;
+	}
+
+	/* 与动效终态一致：整图微倾并左移到左虚线处成照片态、介绍面板落定，
+	   导引线与遮罩底直接到位 */
+	.home-hero .home-guide__guide {
+		clip-path: none;
+	}
+
+	.home-hero__backdrop {
+		opacity: 1;
+	}
+
+	.home-hero__mosaic-frame {
+		top: 42%;
+		left: calc(50% - var(--guide-col) / 2);
+		right: auto;
+		bottom: auto;
+		/* 为叠图伸出主图的部分和两张照片的倾角一起预留高度。 */
+		width: var(--home-hero-photo-w);
+		/* left 的百分比按舞台宽度计算，避免在 transform 中误按照片自身宽度落位。 */
+		margin-inline: 0;
+		transform: translateY(-50%) rotate(-3deg);
+		will-change: auto;
+	}
+
+	.home-hero__mosaic-grid {
+		display: none;
+	}
+
+	.home-hero__mosaic-complete {
+		opacity: 1;
+		visibility: visible;
+		/* 无描边蔓延动画，白边回退为整圈 box-shadow */
+		box-shadow:
+			0 0 0 0.5rem var(--home-hero-photo-edge),
+			0 2.4rem 4.8rem -1.6rem var(--home-hero-photo-shadow);
+	}
+
+	.home-hero__mosaic-complete img {
+		height: auto;
+	}
+
+	.home-hero__intro-card {
+		opacity: 1;
+		visibility: visible;
+	}
+
+	.home-hero__photo-overlay {
+		opacity: 1;
+		visibility: visible;
+		transform: rotate(5deg);
+	}
+
+	.home-hero__mosaic-frame > .home-hero__photo-author {
+		opacity: 1;
+		visibility: visible;
+	}
+
+	.home-hero__rain {
+		display: none;
+	}
+}

@@ -1,0 +1,1146 @@
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import type { HeroMosaicConfig } from "@/types/config";
+import { initHomeHeroDialogue } from "@/utils/home-hero-dialogue";
+import { createFlyText, type FlyTextHandle } from "@/utils/home-hero-fly-text";
+import {
+	createHeroPhotoFramePaths,
+	getHeroPinEndDistance,
+} from "@/utils/home-hero-motion";
+import { initHomeHeroRain } from "@/utils/home-hero-rain";
+import {
+	type HomeHeroWordmarkController,
+	initHomeHeroWordmark,
+} from "@/utils/home-hero-wordmark";
+import { requestScrollTriggerRefresh } from "@/utils/scroll-trigger-refresh";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const RAIN_ACTIVATE_TIME = 1.14;
+const DIALOGUE_REVEAL_TIME = 1.23;
+const DIALOGUE_REVEAL_DURATION = 0.11;
+const DIALOGUE_REVEAL_END_TIME =
+	DIALOGUE_REVEAL_TIME + DIALOGUE_REVEAL_DURATION;
+/** 问候气泡在角色升起一小截后冒出，仍落在 pin 结束的驻留段之前，解锁前一定看得到 */
+const GREETING_REVEAL_TIME = DIALOGUE_REVEAL_TIME + 0.03;
+const INTERACTION_HOLD_START = 1.46;
+/** 角色在照片左下角探出时的上浮距离（px） */
+const DIALOGUE_REVEAL_LIFT = 56;
+/** 角色从照片左下角滑到视口左下角的终点：驻留段开始前必须到位，才能交给 sticky */
+const DIALOGUE_SLIDE_END = INTERACTION_HOLD_START;
+/** 整图拼合完成（0.75 隐藏碎片）后，导引线与纯色底同时由中点铺开，铺满才开始放大整图 */
+const GUIDE_REVEAL_TIME = 0.75;
+const GUIDE_REVEAL_DURATION = 0.16;
+/** 竖线比横线晚一拍铺开，像先拉横向参考线再拉竖向 */
+const GUIDE_VERTICAL_DELAY = 0.03;
+/** 导引线铺满后的照片落位段：整图上移居中并收成照片尺寸 */
+const PHOTO_SETTLE_TIME = GUIDE_REVEAL_TIME + GUIDE_REVEAL_DURATION;
+const PHOTO_SETTLE_DURATION = 0.2;
+/** 照片态的平面倾斜角度（参考落地照片的摆法，不做 3D 透视） */
+const PHOTO_ROTATION = -3;
+/** 叠加图自己的倾角：与照片反向一点，叠出「随手摆上去」的感觉 */
+const PHOTO_OVERLAY_ROTATION = 5;
+/** 叠加图滑入的起点：从照片盒底部再往下探半张图高 */
+const PHOTO_OVERLAY_SLIDE_IN = 0.55;
+/** 倾斜比平移多走的时长：转动贯穿整段平移、落位后再收一点，避免 3D 角度一把到位 */
+const PHOTO_ROTATION_TAIL = 0.25;
+/** 照片态尺寸相对虚线列宽 / 横线画幅高的比例，先撞到的约束生效 */
+const PHOTO_WIDTH_RATIO = 0.62;
+const PHOTO_HEIGHT_RATIO = 0.96;
+/** 照片描边：粗细与图片圆角（rem），与 .home-hero__photo-frame / mosaic-complete 对齐 */
+const PHOTO_FRAME_THICKNESS_REM = 0.5;
+const PHOTO_FRAME_RADIUS_REM = 0.75;
+/** 介绍面板与照片同批落位后淡入 */
+const INTRO_REVEAL_TIME = PHOTO_SETTLE_TIME + PHOTO_SETTLE_DURATION;
+/** 玩偶角点对齐用的微调：照片逆时针倾斜后真实左下角偏右偏下，玩偶再往左下挪一点 */
+const DIALOGUE_CORNER_SHIFT_X = -40;
+const DIALOGUE_CORNER_SHIFT_Y = 36;
+/** 与 .g-guide 的 stroke-dasharray 一致：一个划 14 + 一个空 12 */
+const GUIDE_DASH_PERIOD = 26;
+/** 竖线视差走的周期数：位移恒为整周期，交接处的虚线相位才不会错位 */
+const GUIDE_DASH_CYCLES = 2;
+const GUIDE_DASH_FLOW = GUIDE_DASH_PERIOD * GUIDE_DASH_CYCLES;
+/** 标题从这一刻开始淡出，字标的 canvas 动画同步停摆 */
+const TITLE_EXIT_TIME = 0.72;
+/** 标题淡出时向上抬的距离（px），与整图离场同向 */
+const TITLE_EXIT_LIFT = 46;
+let initialReloadHandled = false;
+
+/**
+ * navigation.type 描述的是「当前 document 是怎么来的」，Swup 导航不会改它：
+ * 在别的页面按了 F5，之后再跳进首页，这里读到的仍然是 "reload"。而本模块恰好是在
+ * 「进首页」那次导航里才第一次执行，于是 hero 的首次挂载会误判成「刚刷新了首页」。
+ * 用 navigation.name（document 首次加载的 URL）与当前路径比对即可排除这种情况。
+ */
+function isInitialDocumentPath(navigationName: string) {
+	try {
+		return (
+			new URL(navigationName, location.href).pathname === location.pathname
+		);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * 刷新首页要从第一帧重播入场编排，所以把滚动位置按回顶部。
+ * 这一步必须由持有 ScrollTrigger 的本模块做：ScrollTrigger 初始化时会记住
+ * 加载时的滚动位置并在首帧后回灌，只 scrollTo(0,0) 会被它盖回去。
+ */
+function resetHeroScrollOnReload() {
+	if (initialReloadHandled) return false;
+	initialReloadHandled = true;
+	const navigation = performance.getEntriesByType("navigation")[0] as
+		| PerformanceNavigationTiming
+		| undefined;
+	if (navigation?.type !== "reload") return false;
+	if (!isInitialDocumentPath(navigation.name)) return false;
+
+	history.scrollRestoration = "manual";
+	ScrollTrigger.clearScrollMemory("manual");
+	window.scrollTo(0, 0);
+	return true;
+}
+
+type HeroRuntimeConfig = {
+	mosaic: HeroMosaicConfig;
+	rain: {
+		enabled?: boolean;
+		intensity?: number;
+		color?: string;
+	};
+};
+
+type TileState = {
+	element: HTMLElement;
+	row: number;
+	column: number;
+	order: number;
+	offsetX: number;
+	offsetY: number;
+	rotation: number;
+	scale: number;
+	blur: number;
+	initiallyVisible: boolean;
+};
+
+type TileTransform = {
+	x: number;
+	y: number;
+	rotation: number;
+	scaleX: number;
+	scaleY: number;
+	blur: number;
+};
+
+type TileEntranceTransform = TileTransform;
+type TileIdleTransform = TileTransform;
+
+function parseRuntimeConfig(hero: HTMLElement): HeroRuntimeConfig | null {
+	try {
+		return JSON.parse(hero.dataset.heroConfig ?? "") as HeroRuntimeConfig;
+	} catch {
+		return null;
+	}
+}
+
+function readNumber(element: HTMLElement, key: string, fallback: number) {
+	const value = Number.parseFloat(element.dataset[key] ?? "");
+	return Number.isFinite(value) ? value : fallback;
+}
+
+function getTileStates(hero: HTMLElement): TileState[] {
+	return Array.from(hero.querySelectorAll<HTMLElement>("[data-hero-tile]")).map(
+		(element) => ({
+			element,
+			row: readNumber(element, "row", 0),
+			column: readNumber(element, "column", 0),
+			order: readNumber(element, "order", 0),
+			offsetX: readNumber(element, "offsetX", 0),
+			offsetY: readNumber(element, "offsetY", 0),
+			rotation: readNumber(element, "rotation", 0),
+			scale: readNumber(element, "scale", 1),
+			blur: readNumber(element, "blur", 0),
+			initiallyVisible: element.dataset.idleVisible === "true",
+		}),
+	);
+}
+
+/**
+ * 摘掉首页的 motion-pending 状态类。
+ * 这个类在 index.astro 上静态渲染，CSS 会按住 identity 与 contact 不显示，
+ * 所以 mountHomeHero 的每条返回路径都必须走到这里，包括提前 return 的分支。
+ */
+function clearMotionPending() {
+	document
+		.querySelector(".home-page--motion-pending")
+		?.classList.remove("home-page--motion-pending");
+}
+
+function setReducedMotionState(
+	hero: HTMLElement,
+	dialogue: ReturnType<typeof initHomeHeroDialogue>,
+) {
+	hero.dataset.reducedMotion = "true";
+	dialogue.setSceneVisible(true);
+	dialogue.setGreetingVisible(true);
+	clearMotionPending();
+}
+
+export function mountHomeHero(): () => void {
+	const hero = document.querySelector<HTMLElement>("[data-home-hero]");
+	if (!hero || hero.dataset.heroMounted === "true") return () => undefined;
+
+	// 移动端首页由 HomeMobile 渲染，桌面 Hero 隐藏时跳过挂载（马赛克/雨/对话框等）
+	if (
+		document.getElementById("home-mobile") &&
+		window.matchMedia("(max-width: 768px)").matches
+	) {
+		clearMotionPending();
+		return () => undefined;
+	}
+
+	const config = parseRuntimeConfig(hero);
+	// 配置读不出来时也要摘掉 motion-pending，否则 identity / contact 会被 CSS 一直按住
+	if (!config) {
+		clearMotionPending();
+		return () => undefined;
+	}
+	const resetAfterReload = resetHeroScrollOnReload();
+
+	hero.dataset.heroMounted = "true";
+	// 本次挂载是否已被拆掉。document.fonts.ready 这类异步回调不能只看
+	// hero.dataset.heroMounted —— 那个标记会被下一次挂载重新写成 "true"，
+	// 上一次挂载的回调于是照样往下走，把 contact 拆成两套字符节点。
+	let disposed = false;
+	// revert 既回收动画也恢复挂载前样式，断点切换会在同一批 DOM 上重新挂载。
+	const animationContext = gsap.context(() => {}, hero);
+	const abortController = new AbortController();
+	// 角色气泡渲染在第二层之后（sticky 才能一路停到第二层底部），不在 hero 里
+	const dialogueRoot = document.querySelector<HTMLElement>(
+		"[data-hero-dialogue]",
+	);
+	const dialogueAnchor = dialogueRoot?.querySelector<HTMLElement>(
+		"[data-dialogue-anchor]",
+	);
+	const dialogue = initHomeHeroDialogue(dialogueRoot);
+	const rain = initHomeHeroRain(hero, config.rain);
+	const reducedMotionQuery = window.matchMedia(
+		"(prefers-reduced-motion: reduce)",
+	);
+	const mobileQuery = window.matchMedia("(max-width: 768px)");
+	const title = hero.querySelector<HTMLElement>("[data-hero-title]");
+	const contact = hero.querySelector<HTMLElement>("[data-hero-contact]");
+	const mosaic = hero.querySelector<HTMLElement>("[data-hero-mosaic]");
+	const mosaicTarget = hero.querySelector<HTMLElement>(
+		"[data-hero-mosaic-target]",
+	);
+	const mosaicComplete = hero.querySelector<HTMLElement>(
+		"[data-hero-mosaic-complete]",
+	);
+	const mosaicGrid = hero.querySelector<HTMLElement>("[data-hero-mosaic-grid]");
+	const mosaicImage = mosaicComplete?.querySelector("img");
+	const backdrop = hero.querySelector<HTMLElement>(".home-hero__backdrop");
+	const guideRows = hero.querySelector<SVGSVGElement>(".home-guide__guide--h");
+	const guideColumns = hero.querySelector<SVGSVGElement>(
+		".home-guide__guide--v",
+	);
+	const guideColumnLines = Array.from(
+		guideColumns?.querySelectorAll<SVGLineElement>("line") ?? [],
+	);
+	const introCards = Array.from(
+		hero.querySelectorAll<HTMLElement>(".home-hero__intro-card"),
+	);
+	const photoOverlay = hero.querySelector<HTMLElement>(
+		"[data-hero-photo-overlay]",
+	);
+	const photoAuthor = hero.querySelector<HTMLElement>(
+		"[data-hero-photo-author]",
+	);
+	const photoFramePaths = Array.from(
+		hero.querySelectorAll<SVGPathElement>("[data-hero-photo-frame] path"),
+	);
+	const tiles = getTileStates(hero);
+	const tileElements = tiles.map((tile) => tile.element);
+	const tileIntroElements = Array.from(
+		hero.querySelectorAll<HTMLElement>(
+			".home-hero__mosaic-tile.is-idle-visible .home-hero__mosaic-tile-image",
+		),
+	);
+	let timeline: ReturnType<typeof gsap.timeline> | null = null;
+	let heroScrollTrigger: ReturnType<typeof ScrollTrigger.create> | null = null;
+	let scrollDriver: ReturnType<typeof gsap.to> | null = null;
+	let tilesIntroTimeline: ReturnType<typeof gsap.timeline> | null = null;
+	let textIntroTimeline: ReturnType<typeof gsap.timeline> | null = null;
+	let flyHandles: FlyTextHandle[] = [];
+	let contactScatterTimeline: ReturnType<typeof gsap.timeline> | null = null;
+	let wordmark: HomeHeroWordmarkController | null = null;
+	let flyLayoutTimer = 0;
+	let hasPlayedTilesIntro = false;
+	const mosaicGeometry = {
+		heroWidth: 0,
+		heroHeight: 0,
+		width: 1,
+		height: 1,
+		photoW: 1,
+		photoH: 1,
+		guideW: 1,
+		x: 0,
+		y: 0,
+		scale: 1,
+	};
+
+	// 用户开始滚动时立即完成进行中的入场动画，交由 scrub 时间线接管
+	const completePendingIntros = () => {
+		if (tilesIntroTimeline) {
+			tilesIntroTimeline.progress(1);
+			tilesIntroTimeline = null;
+		} else if (!hasPlayedTilesIntro && tileIntroElements.length) {
+			// 图片未就绪就开始滚动时也直接显露内层，避免外层拼合后仍是空白。
+			gsap.set(tileIntroElements, { autoAlpha: 1, y: 0, scale: 1 });
+		}
+		hasPlayedTilesIntro = true;
+		if (textIntroTimeline) {
+			textIntroTimeline.progress(1);
+			textIntroTimeline.kill();
+			textIntroTimeline = null;
+		}
+	};
+
+	/**
+	 * 雨的激活条件原本只有下界（时间线过了 RAIN_ACTIVATE_TIME 就一直为真），
+	 * 于是滚过首屏之后 canvas 的 rAF 仍在每帧整屏清屏重绘，白白和下方的
+	 * 影像层抢主线程。这里补一个视口闸门：hero 离开视口即停，回来再恢复。
+	 */
+	let heroInView = true;
+	let rainWanted = false;
+	const syncRain = () => {
+		rain.setActive(rainWanted && heroInView && !reducedMotionQuery.matches);
+	};
+	const heroVisibility = new IntersectionObserver(
+		(entries) => {
+			for (const entry of entries) heroInView = entry.isIntersecting;
+			syncRain();
+		},
+		// 留一点提前量，滚回首屏时雨已经在跑，不会看到空档
+		{ rootMargin: "15% 0px" },
+	);
+	heroVisibility.observe(hero);
+
+	const updateSceneState = (progress: number) => {
+		if (disposed) return;
+		const timelineTime = progress * (timeline?.duration() ?? 1);
+		const rainActive = timelineTime >= RAIN_ACTIVATE_TIME;
+		const dialogueVisible = timelineTime >= DIALOGUE_REVEAL_TIME;
+		const greetingWanted = timelineTime >= GREETING_REVEAL_TIME;
+		// 先摘掉问候再同步角色可见性：快速滚动时两个阈值会在同一帧一起跨过，
+		// 若先把 scene 置 true，greeting 的 false→true 会被「角色不可见」挡掉，气泡就再也不冒了
+		if (!greetingWanted) dialogue.setGreetingVisible(false);
+		dialogue.setSceneVisible(dialogueVisible);
+		if (greetingWanted) dialogue.setGreetingVisible(true);
+		rainWanted = rainActive;
+		syncRain();
+		wordmark?.setActive(timelineTime < TITLE_EXIT_TIME);
+	};
+
+	// computed width / height 不受 transform 影响且保留小数；只在挂载和 refresh 时读布局。
+	const measureMosaic = (): boolean => {
+		if (!mosaic || !mosaicTarget) return false;
+		const style = getComputedStyle(mosaic);
+		const frameStyle = getComputedStyle(mosaicTarget);
+		const heroWidth = hero.clientWidth;
+		const heroHeight = hero.clientHeight;
+		const width = Math.max(1, Number.parseFloat(style.width));
+		const height = Math.max(1, Number.parseFloat(style.height));
+		const bandHeight = Math.max(1, Number.parseFloat(frameStyle.height));
+		const guideWidth = guideColumns
+			? Number.parseFloat(getComputedStyle(guideColumns).width)
+			: Number.NaN;
+		// 按整组照片占用的高度缩放，叠图伸出的部分和倾角都必须留在画幅内。
+		const stackBottom = Math.max(
+			height,
+			photoOverlay
+				? photoOverlay.offsetTop + photoOverlay.offsetHeight
+				: height,
+		);
+		const rotationPadding =
+			width * Math.abs(Math.sin((PHOTO_ROTATION * Math.PI) / 180)) +
+			(photoOverlay?.offsetWidth ?? 0) *
+				Math.abs(Math.sin((PHOTO_OVERLAY_ROTATION * Math.PI) / 180));
+		const guideW = Number.isFinite(guideWidth) ? guideWidth : heroWidth;
+		const columnWidth = Number.isFinite(guideWidth)
+			? guideWidth * PHOTO_WIDTH_RATIO
+			: width;
+		const scale = Math.min(
+			1,
+			columnWidth / width,
+			(bandHeight * PHOTO_HEIGHT_RATIO) / (stackBottom + rotationPadding),
+		);
+		const photoW = width * scale;
+		const center = Number.parseFloat(style.top) + height / 2;
+		const y = heroHeight / 2 - center - ((stackBottom - height) * scale) / 2;
+		const x = (photoW - guideW) / 2;
+		// 照片实际宽度回写成 CSS 变量，介绍面板靠它贴到照片右侧
+		hero.style.setProperty("--home-hero-photo-w", `${Math.round(photoW)}px`);
+		const hasChanged =
+			heroWidth !== mosaicGeometry.heroWidth ||
+			heroHeight !== mosaicGeometry.heroHeight ||
+			width !== mosaicGeometry.width ||
+			height !== mosaicGeometry.height ||
+			x !== mosaicGeometry.x ||
+			y !== mosaicGeometry.y ||
+			scale !== mosaicGeometry.scale;
+		Object.assign(mosaicGeometry, {
+			heroWidth,
+			heroHeight,
+			width,
+			height,
+			photoW,
+			photoH: height * scale,
+			guideW,
+			x,
+			y,
+			scale,
+		});
+		return hasChanged;
+	};
+
+	// 照片左下角相对「视口左下角静止位」的偏移：角色先在这里探出，
+	// 再随滚动滑回 (0, 0)，之后由 sticky 带进第二层。
+	// 照片左缘停在左虚线上，角点再按 SHIFT 往左下挪，贴住倾斜后的真实角落
+	const getDialoguePhotoOffset = () => ({
+		x:
+			(mosaicGeometry.heroWidth - mosaicGeometry.guideW) / 2 +
+			DIALOGUE_CORNER_SHIFT_X,
+		y:
+			-Math.max(0, (mosaicGeometry.heroHeight - mosaicGeometry.photoH) / 2) +
+			DIALOGUE_CORNER_SHIFT_Y,
+	});
+
+	// 照片描边是 8 条从四角出发到边中点的笔画，d 按拼合框实测尺寸生成；
+	// 减弱动效路径不会调用这里，SVG 保持无 d、不渲染
+	const updatePhotoFrame = () => {
+		if (!mosaic || photoFramePaths.length === 0) return;
+		const rem =
+			Number.parseFloat(getComputedStyle(document.documentElement).fontSize) ||
+			16;
+		const paths = createHeroPhotoFramePaths(
+			mosaic.offsetWidth,
+			mosaic.offsetHeight,
+			PHOTO_FRAME_THICKNESS_REM * rem,
+			PHOTO_FRAME_RADIUS_REM * rem,
+		);
+		photoFramePaths.forEach((path, index) => {
+			path.setAttribute("d", paths[index] ?? "");
+		});
+	};
+
+	const getTileEntranceTransform = (tile: TileState): TileEntranceTransform => {
+		const horizontalRange = Math.max(
+			mosaicGeometry.heroWidth * (mobileQuery.matches ? 0.22 : 0.29),
+			mosaicGeometry.width * 0.48,
+		);
+		const verticalRange = Math.max(
+			mosaicGeometry.heroHeight * (mobileQuery.matches ? 0.16 : 0.24),
+			mosaicGeometry.height * 0.78,
+		);
+		const blurBase = mobileQuery.matches ? 8 : 13;
+		const blurRange = mobileQuery.matches ? 6 : 10;
+		const normalizedX = tile.offsetX / 75;
+		const normalizedY = tile.offsetY / 57.5;
+		const distance = Math.hypot(normalizedX, normalizedY);
+		const minimumTravel = 0.52;
+		const travelMultiplier =
+			distance > 0 && distance < minimumTravel ? minimumTravel / distance : 1;
+
+		return {
+			x: normalizedX * travelMultiplier * horizontalRange,
+			y: normalizedY * travelMultiplier * verticalRange,
+			rotation: tile.rotation * 0.12,
+			scaleX: 0.66 + Math.min(0.16, Math.max(0, (tile.scale - 0.72) * 0.48)),
+			scaleY: 0.66 + Math.min(0.16, Math.max(0, (tile.scale - 0.72) * 0.48)),
+			blur: blurBase + (tile.blur / 5) * blurRange,
+		};
+	};
+
+	const getTileIdleTransform = (tile: TileState): TileIdleTransform => {
+		const mosaicWidth = mosaicGeometry.width;
+		const mosaicHeight = mosaicGeometry.height;
+		const idleVisible = Math.max(1, config.mosaic.idleVisible);
+		const depth = tile.order % idleVisible;
+		const depthProgress = idleVisible > 1 ? depth / (idleVisible - 1) : 0;
+		const normalizedX = (tile.offsetX + 75) / 150;
+		const normalizedY = (tile.offsetY + 57.5) / 115;
+		const targetX = mosaicWidth * (0.04 + normalizedX * 0.92);
+		const targetY = mosaicHeight * (0.3 + normalizedY * 0.62);
+		const tileCenterX =
+			((tile.column + 0.5) / config.mosaic.columns) * mosaicWidth;
+		const tileCenterY = ((tile.row + 0.5) / config.mosaic.rows) * mosaicHeight;
+
+		return {
+			x: targetX - tileCenterX,
+			y: targetY - tileCenterY,
+			rotation: tile.rotation,
+			scaleX: 1.18 - depthProgress * 0.38,
+			scaleY: 1.18 - depthProgress * 0.38,
+			blur: depthProgress * 7,
+		};
+	};
+
+	// 首屏布局和拼合入场共用当前画布尺寸，refresh 后不会沿用旧窗口的像素位移。
+	const getTileInitialTransform = (tile: TileState): TileTransform => {
+		const layout = config.mosaic.initialLayout?.[tile.order];
+		if (mobileQuery.matches || !mosaic || !layout) {
+			return getTileIdleTransform(tile);
+		}
+
+		const mosaicWidth = mosaicGeometry.width;
+		const mosaicHeight = mosaicGeometry.height;
+		const columns = Math.max(1, config.mosaic.columns);
+		const rows = Math.max(1, config.mosaic.rows);
+		const clampRatio = (value: number, fallback: number) =>
+			Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+		const centerX = clampRatio(layout.x, 0.5) * mosaicWidth;
+		const centerY = clampRatio(layout.y, 0.5) * mosaicHeight;
+		const tileCenterX = ((tile.column + 0.5) / columns) * mosaicWidth;
+		const tileCenterY = ((tile.row + 0.5) / rows) * mosaicHeight;
+		const width = Math.max(0.01, clampRatio(layout.width, 1 / columns));
+		const height = Math.max(0.01, clampRatio(layout.height, 1 / rows));
+		const rotation =
+			typeof layout.rotation === "number" && Number.isFinite(layout.rotation)
+				? layout.rotation
+				: 0;
+		const blur = Number.isFinite(layout.blur)
+			? Math.max(0, layout.blur ?? 0)
+			: 0;
+
+		return {
+			x: centerX - tileCenterX,
+			y: centerY - tileCenterY,
+			rotation,
+			scaleX: width * columns,
+			scaleY: height * rows,
+			blur,
+		};
+	};
+	const initialTileVars = {
+		x: (index: number) => getTileInitialTransform(tiles[index]).x,
+		y: (index: number) => getTileInitialTransform(tiles[index]).y,
+		rotation: (index: number) => getTileInitialTransform(tiles[index]).rotation,
+		scaleX: (index: number) => getTileInitialTransform(tiles[index]).scaleX,
+		scaleY: (index: number) => getTileInitialTransform(tiles[index]).scaleY,
+		filter: (index: number) =>
+			`blur(${getTileInitialTransform(tiles[index]).blur}px)`,
+		autoAlpha: (index: number) => (tiles[index].initiallyVisible ? 1 : 0),
+	};
+
+	const getBaseScrollDistance = () =>
+		mobileQuery.matches
+			? getHeroPinEndDistance(
+					config.mosaic.mobileScrollDistance,
+					window.innerHeight,
+					config.mosaic.mobileMinViewports,
+				)
+			: getHeroPinEndDistance(
+					config.mosaic.desktopScrollDistance,
+					window.innerHeight,
+					config.mosaic.desktopMinViewports,
+				);
+
+	const getDialogueEndProgress = () => {
+		const duration = Math.max(0.001, timeline?.duration() ?? 1);
+		return Math.min(1, DIALOGUE_REVEAL_END_TIME / duration);
+	};
+
+	const getDialogueTailDistance = () => {
+		if (getDialogueEndProgress() >= 1) return 0;
+		return Math.max(
+			0,
+			mobileQuery.matches
+				? config.mosaic.mobileDialogueTailDistance
+				: config.mosaic.desktopDialogueTailDistance,
+		);
+	};
+
+	const getCompressedScrollDistance = () =>
+		getBaseScrollDistance() * getDialogueEndProgress() +
+		getDialogueTailDistance();
+
+	const mapScrollProgressToTimelineProgress = (scrollProgress: number) => {
+		const progress = Math.min(1, Math.max(0, scrollProgress));
+		const baseDistance = getBaseScrollDistance();
+		const dialogueEndProgress = getDialogueEndProgress();
+		const preservedDistance = baseDistance * dialogueEndProgress;
+		const tailDistance = getDialogueTailDistance();
+		const scrollDistance = progress * (preservedDistance + tailDistance);
+
+		if (scrollDistance <= preservedDistance) {
+			return Math.min(
+				dialogueEndProgress,
+				scrollDistance / Math.max(1, baseDistance),
+			);
+		}
+		if (tailDistance <= 0) return 1;
+
+		return Math.min(
+			1,
+			dialogueEndProgress +
+				((scrollDistance - preservedDistance) / tailDistance) *
+					(1 - dialogueEndProgress),
+		);
+	};
+
+	const renderTimelineForScroll = (scrollProgress: number) => {
+		const progress = mapScrollProgressToTimelineProgress(scrollProgress);
+		// 先结束入场再渲染滚动帧，避免入场终帧覆盖本帧已经算好的淡出状态。
+		if (progress > 0.002) completePendingIntros();
+		timeline?.totalProgress(progress);
+		updateSceneState(progress);
+	};
+
+	const refreshMosaicGeometry = () => {
+		if (!timeline || !measureMosaic()) return;
+		updatePhotoFrame();
+		const progress = timeline.totalProgress();
+		// 入场只作用于内层图片，刷新外层几何时保留渐入进度。
+		timeline.totalProgress(0, true);
+		// 进度为 0 时，invalidate 不会立即初始化尚未开始的补间，静止碎片要同步重定位。
+		gsap.set(tileElements, { ...initialTileVars });
+		timeline.invalidate();
+		timeline.totalProgress(progress, true);
+	};
+
+	const buildTimeline = () => {
+		if (
+			!title ||
+			!mosaic ||
+			!mosaicComplete ||
+			!mosaicGrid ||
+			tiles.length === 0
+		)
+			return;
+
+		measureMosaic();
+		updatePhotoFrame();
+		gsap.set(mosaic, {
+			x: 0,
+			y: 0,
+			scale: 1,
+			rotation: 0,
+		});
+		gsap.set(mosaicComplete, { autoAlpha: 0 });
+		// 先记录 CSS 的 display，卸载时才能清掉延迟 fromTo 留下的内联起点。
+		gsap.set(mosaicGrid, { display: "block" });
+		if (dialogueAnchor) {
+			const corner = getDialoguePhotoOffset();
+			gsap.set(dialogueAnchor, {
+				autoAlpha: 0,
+				x: corner.x,
+				y: corner.y,
+				yPercent: 0,
+			});
+		}
+		gsap.set(tileElements, { ...initialTileVars });
+
+		timeline = gsap.timeline({
+			defaults: { ease: "none" },
+			paused: true,
+		});
+
+		timeline.to({}, { duration: 1 });
+		// 这条 scrub 时间线会在画布尺寸变化后 invalidate()。
+		// GSAP 的 to 补间在 invalidate 后会把「当前 DOM 值」重新记录为起点：
+		// 若 invalidate 发生在标题已淡出的深滚动状态，起点被记成 autoAlpha 0，
+		// 之后滚回顶部标题永远不可见。因此所有补间一律 fromTo 显式锚定起点。
+		timeline.fromTo(
+			title,
+			{ autoAlpha: 1, yPercent: 0, scale: 1 },
+			{
+				yPercent: -20,
+				scale: 0.58,
+				transformOrigin: "0% 50%",
+				duration: 0.1,
+				ease: "power3.inOut",
+			},
+			0,
+		);
+		// 右下角 contact 的退场不再整体渐隐，改为字符随风散落，
+		// 由 prepareFlyText() 在字体就绪后将 scatter 时间线挂载到 0.04 位置。
+		timeline.fromTo(
+			tileElements,
+			{ ...initialTileVars },
+			{
+				autoAlpha: 0,
+				duration: 0.06,
+				ease: "power2.in",
+			},
+			0.04,
+		);
+
+		for (const tile of tiles) {
+			const start = 0.1 + tile.order * 0.02;
+			timeline.fromTo(
+				tile.element,
+				{
+					x: () => getTileEntranceTransform(tile).x,
+					y: () => getTileEntranceTransform(tile).y,
+					rotation: () => getTileEntranceTransform(tile).rotation,
+					scaleX: () => getTileEntranceTransform(tile).scaleX,
+					scaleY: () => getTileEntranceTransform(tile).scaleY,
+					filter: () => `blur(${getTileEntranceTransform(tile).blur}px)`,
+					autoAlpha: 0,
+				},
+				{
+					x: 0,
+					y: 0,
+					rotation: 0,
+					scaleX: 1,
+					scaleY: 1,
+					filter: "blur(0px)",
+					autoAlpha: 1,
+					duration: 0.09,
+					ease: "power3.inOut",
+					immediateRender: false,
+				},
+				start,
+			);
+		}
+
+		timeline.fromTo(
+			mosaicComplete,
+			{ autoAlpha: 0 },
+			{ autoAlpha: 1, duration: 0.03, ease: "none" },
+			0.72,
+		);
+		// 整图与碎片完全对齐后隐藏碎片 DOM，避免 24 个合成层随整图缩放继续绘制。
+		timeline.fromTo(
+			mosaicGrid,
+			{ display: "block" },
+			{ display: "none", duration: 0, immediateRender: false },
+			0.75,
+		);
+
+		// 淡出段只加 y 位移，不碰 yPercent：yPercent 已由上一段补间锚定，若这里再显式给
+		// yPercent 起点，进度归零的回滚渲染会按时间序先后渲染两段，后渲染的这段把
+		// yPercent 又写回自己的起点，标题会停在 -20% 偏移上。
+		timeline.fromTo(
+			title,
+			{ autoAlpha: 1, y: 0 },
+			{
+				autoAlpha: 0,
+				y: -TITLE_EXIT_LIFT,
+				duration: 0.08,
+				ease: "power2.in",
+			},
+			TITLE_EXIT_TIME,
+		);
+
+		if (dialogueAnchor) {
+			// 角色先在照片左下角探出，再随滚动滑到视口左下角，
+			// 之后由 sticky 带着一路停到第二层左下角
+			timeline.fromTo(
+				dialogueAnchor,
+				{
+					autoAlpha: 0,
+					x: () => getDialoguePhotoOffset().x,
+					y: () => getDialoguePhotoOffset().y + DIALOGUE_REVEAL_LIFT,
+				},
+				{
+					autoAlpha: 1,
+					x: () => getDialoguePhotoOffset().x,
+					y: () => getDialoguePhotoOffset().y,
+					duration: DIALOGUE_REVEAL_DURATION,
+					ease: "power3.out",
+				},
+				DIALOGUE_REVEAL_TIME,
+			);
+			timeline.fromTo(
+				dialogueAnchor,
+				{
+					x: () => getDialoguePhotoOffset().x,
+					y: () => getDialoguePhotoOffset().y,
+				},
+				{
+					x: 0,
+					y: 0,
+					duration: Math.max(
+						0.001,
+						DIALOGUE_SLIDE_END - DIALOGUE_REVEAL_END_TIME,
+					),
+					ease: "power1.inOut",
+				},
+				DIALOGUE_REVEAL_END_TIME,
+			);
+		}
+
+		// 导引线铺满后整图不再铺满画幅：上移居中并左移到左虚线处、收成照片尺寸；
+		// 立体阴影由 CSS 落在整图上，右腾出的列给介绍面板
+		timeline.fromTo(
+			mosaic,
+			{ x: 0, y: 0, scale: 1 },
+			{
+				x: () => mosaicGeometry.x,
+				y: () => mosaicGeometry.y,
+				scale: () => mosaicGeometry.scale,
+				duration: PHOTO_SETTLE_DURATION,
+				ease: "power3.inOut",
+			},
+			PHOTO_SETTLE_TIME,
+		);
+		// 倾斜与平移同帧起步、但走得更长：平移全程都在转，落位后再收一段才停，
+		// 角度不会在平移起点一把到位
+		timeline.fromTo(
+			mosaic,
+			{ rotation: 0 },
+			{
+				rotation: PHOTO_ROTATION,
+				duration: PHOTO_SETTLE_DURATION + PHOTO_ROTATION_TAIL,
+				ease: "power1.inOut",
+			},
+			PHOTO_SETTLE_TIME,
+		);
+		if (photoFramePaths.length) {
+			// 拼合一完成（碎片隐藏、导引线同段铺开时）边框就从四角沿四边向中点蔓延，
+			// 不等照片落位；描边在拼合框内，之后跟着照片一起左移倾斜。
+			// 1000 与 pathLength 对齐：px 补间会被取整，用 1 会退化成 1/0 跳变
+			timeline.fromTo(
+				photoFramePaths,
+				{ strokeDashoffset: 1000 },
+				{
+					strokeDashoffset: 0,
+					duration: GUIDE_REVEAL_DURATION,
+					ease: "power2.inOut",
+				},
+				GUIDE_REVEAL_TIME,
+			);
+		}
+		if (introCards.length) {
+			// 三张介绍卡初始绕右下角竖立，照片落位后顶部往左倒下归位、错峰分层
+			timeline.fromTo(
+				introCards,
+				{ autoAlpha: 0, rotate: 90 },
+				{
+					autoAlpha: 1,
+					rotate: 0,
+					duration: 0.16,
+					ease: "power2.out",
+					stagger: 0.05,
+				},
+				INTRO_REVEAL_TIME,
+			);
+		}
+		if (photoAuthor) {
+			// 主图作者标牌随介绍卡同拍淡入，此时照片已缩到落位比例
+			timeline.fromTo(
+				photoAuthor,
+				{ autoAlpha: 0 },
+				{ autoAlpha: 1, duration: 0.1, ease: "power1.out" },
+				INTRO_REVEAL_TIME,
+			);
+		}
+		if (photoOverlay) {
+			// 叠加图与介绍卡同拍：从照片下缘外滑入、带自己的倾角叠上去。
+			// 它在拼合框内，会跟着照片一起缩放平移，像随手压在上面的第二张
+			timeline.fromTo(
+				photoOverlay,
+				{
+					autoAlpha: 0,
+					y: () => mosaicGeometry.height * PHOTO_OVERLAY_SLIDE_IN,
+					rotation: 0,
+				},
+				{
+					autoAlpha: 1,
+					y: 0,
+					rotation: PHOTO_OVERLAY_ROTATION,
+					duration: 0.16,
+					ease: "power3.out",
+				},
+				INTRO_REVEAL_TIME,
+			);
+		}
+		if (backdrop && guideRows && guideColumns) {
+			// 纯色底淡入遮掉缝线，与导引线由中点铺开同一段进行
+			timeline.fromTo(
+				backdrop,
+				{ opacity: 0 },
+				{
+					opacity: 1,
+					duration: GUIDE_REVEAL_DURATION,
+					ease: "power2.inOut",
+				},
+				GUIDE_REVEAL_TIME,
+			);
+			timeline.fromTo(
+				guideRows,
+				{ clipPath: "inset(-5px 50% -5px 50%)" },
+				{
+					clipPath: "inset(-5px 0% -5px 0%)",
+					duration: GUIDE_REVEAL_DURATION,
+					ease: "power2.inOut",
+				},
+				GUIDE_REVEAL_TIME,
+			);
+			timeline.fromTo(
+				guideColumns,
+				{ clipPath: "inset(50% -5px 50% -5px)" },
+				{
+					clipPath: "inset(0% -5px 0% -5px)",
+					duration: GUIDE_REVEAL_DURATION,
+					ease: "power2.inOut",
+				},
+				GUIDE_REVEAL_TIME + GUIDE_VERTICAL_DELAY,
+			);
+			// 竖线视差：只让虚线整体往下流，线两端不动、且只走整数个周期，
+			// 既保住与第二层竖线在交接处的相位，也不会看着像线被拉断
+			timeline.fromTo(
+				guideColumnLines,
+				{ strokeDashoffset: 13 },
+				{
+					strokeDashoffset: 13 + GUIDE_DASH_FLOW,
+					duration: GUIDE_REVEAL_DURATION + PHOTO_SETTLE_DURATION,
+					ease: "power2.inOut",
+				},
+				GUIDE_REVEAL_TIME,
+			);
+		}
+
+		timeline.to(
+			{},
+			{ duration: Math.max(0, config.mosaic.interactionHold) },
+			INTERACTION_HOLD_START,
+		);
+
+		const scrollState = { progress: 0 };
+		scrollDriver = gsap.to(scrollState, {
+			progress: 1,
+			duration: 1,
+			ease: "none",
+			paused: true,
+			onUpdate: () => renderTimelineForScroll(scrollState.progress),
+		});
+
+		heroScrollTrigger = ScrollTrigger.create({
+			id: "home-hero-two-layer",
+			trigger: hero,
+			start: "top top",
+			end: () => `+=${getCompressedScrollDistance()}`,
+			pin: hero,
+			pinSpacing: true,
+			scrub: config.mosaic.scrub,
+			anticipatePin: 1,
+			animation: scrollDriver,
+			invalidateOnRefresh: true,
+			onRefresh: (self) => {
+				// refreshInit 时 pin 可能还锁着旧宽度，必须等 pin 恢复新布局后再测量。
+				animationContext.add(refreshMosaicGeometry);
+				self.update();
+				renderTimelineForScroll(scrollDriver?.progress() ?? self.progress);
+				animationContext.add(playTilesIntro);
+			},
+			onUpdate: (self) => {
+				if (!scrollDriver) renderTimelineForScroll(self.progress);
+			},
+		});
+
+		renderTimelineForScroll(heroScrollTrigger.progress);
+		// 影像层要等 await import("gsap") 之后才建 pin，比这里晚若干微任务。
+		// 立刻 refresh 会按「还没有影像层 .pin-spacer」的文档高度算 pin 起止点，
+		// 攒到下一帧统一 refresh，那时各层的 pin 都已插好。
+		requestScrollTriggerRefresh(ScrollTrigger);
+	};
+
+	// 入场只动内部图片，外层的位置、景深和透明度始终交给滚动时间线。
+	// 不再补间模糊，避免入场时反复栅格化图片；初始景深仍由外层保留。
+	const playTilesIntro = () => {
+		if (
+			hasPlayedTilesIntro ||
+			!mosaicImage?.complete ||
+			mosaicImage.naturalWidth === 0
+		)
+			return;
+		hasPlayedTilesIntro = true;
+		if (!tileIntroElements.length) return;
+		tilesIntroTimeline = gsap.timeline({
+			onComplete: () => {
+				tilesIntroTimeline = null;
+			},
+		});
+		tilesIntroTimeline.fromTo(
+			tileIntroElements,
+			{ y: 18, scale: 0.96, autoAlpha: 0 },
+			{
+				y: 0,
+				scale: 1,
+				autoAlpha: 1,
+				duration: 0.7,
+				stagger: 0.05,
+				ease: "power2.out",
+				immediateRender: true,
+			},
+			0.06,
+		);
+	};
+
+	// 右下角 contact：Scatter random 入场；下滑时字符风散退场
+	const prepareFlyText = () => {
+		const titleHost = hero.querySelector<HTMLElement>("[data-hero-wordmark]");
+		const contactHosts = (
+			contact
+				? [
+						hero.querySelector<HTMLElement>(".home-hero__contact-platform"),
+						hero.querySelector<HTMLElement>(".home-hero__contact-handle"),
+					]
+				: []
+		).filter((host): host is HTMLElement => host !== null);
+		const occupation = hero.querySelector<HTMLElement>(
+			".home-hero__occupation",
+		);
+		const identityText = [titleHost, occupation].filter(
+			(element): element is HTMLElement => element !== null,
+		);
+
+		// 字体就绪前先隐藏 contact，避免拆字前闪现原始整段文字。
+		contactHosts.forEach((host) => {
+			gsap.set(host, { autoAlpha: 0 });
+		});
+		identityText.forEach((element) => {
+			gsap.set(element, { autoAlpha: 0, y: 14 });
+		});
+
+		const mountContactScatter = () => {
+			if (!timeline || !flyHandles.length) return;
+			contactScatterTimeline?.kill();
+			const scatter = gsap.timeline();
+			for (const handle of flyHandles) {
+				const tl = handle.buildScatter(0.12);
+				if (tl) scatter.add(tl, 0);
+			}
+			contactScatterTimeline = scatter;
+			timeline.add(scatter, 0.04);
+		};
+
+		const handleFlyLayoutChange = () => {
+			window.clearTimeout(flyLayoutTimer);
+			flyLayoutTimer = window.setTimeout(() => {
+				if (disposed) return;
+				textIntroTimeline?.kill();
+				textIntroTimeline = null;
+				contactScatterTimeline?.kill();
+				contactScatterTimeline = null;
+				animationContext.add(() => {
+					for (const handle of flyHandles) handle.rebuild();
+					mountContactScatter();
+				});
+			}, 200);
+		};
+
+		document.fonts.ready.then(() => {
+			if (disposed) return;
+			// Promise 回调不继承同步 context，必须显式登记，包括 identity 的延迟补间。
+			animationContext.add(() => {
+				flyHandles = contactHosts.map((host) => createFlyText(host));
+				for (const handle of flyHandles) {
+					handle.prepare();
+					handle.onLayoutChange(handleFlyLayoutChange);
+				}
+				contactHosts.forEach((host) => {
+					gsap.set(host, { autoAlpha: 1 });
+				});
+
+				mountContactScatter();
+
+				const progress = heroScrollTrigger?.progress ?? 0;
+				if (progress <= 0.01) {
+					const intro = gsap.timeline();
+					const contactEntrances = flyHandles
+						.map((handle) => handle.buildEntrance(0.8))
+						.filter(
+							(tl): tl is ReturnType<typeof gsap.timeline> => tl !== null,
+						);
+					contactEntrances.forEach((tl, index) => {
+						intro.add(tl, 0.22 + index * 0.05);
+					});
+					textIntroTimeline = intro;
+				} else {
+					for (const handle of flyHandles) handle.setNatural();
+				}
+
+				if (identityText.length) {
+					gsap.to(identityText, {
+						autoAlpha: 1,
+						y: 0,
+						duration: 0.7,
+						ease: "power2.out",
+						delay: 0.5,
+					});
+				}
+			});
+		});
+	};
+
+	animationContext.add(() => {
+		if (reducedMotionQuery.matches) {
+			setReducedMotionState(hero, dialogue);
+		} else {
+			// 字标要在 buildTimeline 之前建好：时间线首轮渲染会立刻 setActive 驱动它
+			wordmark = initHomeHeroWordmark(hero);
+			buildTimeline();
+			playTilesIntro();
+			// 慢速图片先建立 pin；图片撑出自然高度后统一刷新几何，再播放碎片入场。
+			for (const image of [mosaicImage, photoOverlay?.querySelector("img")]) {
+				if (!image || image.complete) continue;
+				image.addEventListener(
+					"load",
+					() => requestScrollTriggerRefresh(ScrollTrigger),
+					{ once: true, signal: abortController.signal },
+				);
+			}
+			prepareFlyText();
+		}
+	});
+	document
+		.querySelector(".home-page--motion-pending")
+		?.classList.remove("home-page--motion-pending");
+
+	// 复位要等 pin 与时间线都建好之后的那一帧，且必须可被卸载取消：
+	// 快速离开首页时这一帧若还跑着，会在新页面上 scrollTo(0,0) 并改全局恢复模式。
+	let reloadResetFrame = 0;
+	if (resetAfterReload) {
+		reloadResetFrame = requestAnimationFrame(() => {
+			reloadResetFrame = 0;
+			if (disposed) return;
+			window.scrollTo(0, 0);
+			timeline?.progress(0);
+			scrollDriver?.progress(0);
+			updateSceneState(0);
+			requestScrollTriggerRefresh(ScrollTrigger);
+			history.scrollRestoration = "auto";
+		});
+	}
+
+	return () => {
+		if (disposed) return;
+		disposed = true;
+		if (reloadResetFrame) cancelAnimationFrame(reloadResetFrame);
+		// 合并刷新是跨层共享的，不能在 Hero 单独卸载时取消其它层的请求。
+		window.clearTimeout(flyLayoutTimer);
+		heroVisibility.disconnect();
+		rain.destroy();
+		dialogue.destroy();
+		abortController.abort();
+		animationContext.revert();
+		heroScrollTrigger = null;
+		scrollDriver = null;
+		timeline = null;
+		tilesIntroTimeline = null;
+		textIntroTimeline = null;
+		contactScatterTimeline = null;
+		// 先回退字符动画，再还原宿主 DOM，避免同节点重挂载时重复拆字。
+		for (const handle of flyHandles) handle.destroy();
+		flyHandles = [];
+		wordmark?.destroy();
+		wordmark = null;
+		delete hero.dataset.heroMounted;
+		delete hero.dataset.reducedMotion;
+	};
+}
